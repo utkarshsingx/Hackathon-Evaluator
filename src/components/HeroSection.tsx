@@ -36,8 +36,8 @@ export function HeroSection() {
       />
 
       {/* Content overlay - pointer-events-none so clicks reach Hyperspeed; Button has pointer-events-auto */}
-      <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 pointer-events-none">
-        <h1 className="text-center text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
+      <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-4 sm:px-6 pointer-events-none">
+        <h1 className="text-center text-3xl font-bold tracking-tight sm:text-5xl md:text-6xl">
           <ShinyText
             text="Hackathon Evaluator"
             speed={2}
@@ -50,12 +50,12 @@ export function HeroSection() {
             pauseOnHover={false}
           />
         </h1>
-        <p className="mt-4 max-w-md text-center text-lg text-muted-foreground">
+        <p className="mt-3 sm:mt-4 max-w-md text-center text-base sm:text-lg text-muted-foreground px-2">
           AI-powered project evaluation
         </p>
         <Button
           size="lg"
-          className="mt-8 gap-2 pointer-events-auto"
+          className="mt-6 sm:mt-8 gap-2 pointer-events-auto text-sm sm:text-base h-10 sm:h-11 px-6"
           onClick={scrollToDashboard}
         >
           Get Started

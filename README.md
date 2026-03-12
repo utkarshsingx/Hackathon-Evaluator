@@ -65,7 +65,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## 📁 CSV Format
 
-Your CSV must include these exact headers (column names must match exactly):
+Your CSV must include these headers (exact match or supported alternates like "Email Address" for "Email", "Number" for "Phone Number"):
 
 | Column | Required |
 |--------|----------|

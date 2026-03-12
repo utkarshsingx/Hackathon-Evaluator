@@ -434,23 +434,23 @@ export function Dashboard() {
     <div className="relative min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-xl">
-        <div className="container flex h-16 items-center justify-center px-4 max-w-7xl mx-auto">
+        <div className="flex h-12 sm:h-16 items-center justify-center px-3 sm:px-4 max-w-7xl mx-auto">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowSettings(true)}
-            className="gap-2"
+            className="gap-1.5 sm:gap-2 h-9 sm:h-10 text-sm"
           >
-            <Settings className="h-4 w-4" />
+            <Settings className="h-4 w-4 shrink-0" />
             Settings
           </Button>
         </div>
       </header>
 
-      <main className="container px-4 py-8 space-y-8 max-w-7xl mx-auto">
+      <main className="container px-3 sm:px-4 py-4 sm:py-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
         {/* Settings Dialog */}
         <Dialog open={showSettings} onOpenChange={setShowSettings}>
-          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogContent className="w-[calc(100%-2rem)] max-w-lg max-h-[85vh] sm:max-h-[90vh] overflow-y-auto mx-4">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5" />
@@ -603,7 +603,7 @@ export function Dashboard() {
 
         {/* CSV Validation Error Dialog */}
         <Dialog open={!!csvError} onOpenChange={(open) => !open && setCsvError(null)}>
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="w-[calc(100%-2rem)] max-w-lg mx-4 max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-destructive">
                 <XCircle className="h-5 w-5 shrink-0" />
@@ -661,8 +661,8 @@ export function Dashboard() {
 
         {/* CSV Upload */}
         <Card className="shadow-soft overflow-hidden animate-in-slide-slow">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex justify-center text-center text-2xl">
+          <CardHeader className="pb-3 sm:pb-4 px-4 sm:px-6">
+            <CardTitle className="flex justify-center text-center text-xl sm:text-2xl">
               <ShinyText
                 text="Upload Submissions"
                 speed={2}
@@ -672,11 +672,33 @@ export function Dashboard() {
                 direction="left"
               />
             </CardTitle>
-            <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl mx-auto text-center">
-              Upload a CSV with the required columns: Timestamp, Email, Phone Number, Project Title, What real-world problem are you solving?, Who is this problem for? (Profession / domain / user type), How does your solution use AI?, What AI Tools / Platforms have you used, How does your solution help the user? (example-time saved…), Please share GOOGLE DRIVE link…, Explain your solution in detail…, What was the biggest challenge… (Score and Reason is optional).
-            </p>
+            <div className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-2xl mx-auto text-center space-y-3">
+              <p>
+                Use a CSV with submission data. Required columns: Timestamp, Email (or Email Address), Phone Number (or Number), Project Title, problem statement, target audience, AI usage, tools, user benefit, demo link, detailed explanation, and biggest challenge.
+              </p>
+              <details className="text-left rounded-lg border border-border bg-muted/30 p-3">
+                <summary className="cursor-pointer font-medium text-foreground hover:text-primary transition-colors">
+                  View full column list
+                </summary>
+                <ul className="mt-2 space-y-1 text-xs">
+                  <li>• Timestamp, Email, Phone Number, Project Title</li>
+                  <li>• What real-world problem are you solving?</li>
+                  <li>• Who is this problem for? (Profession / domain / user type)</li>
+                  <li>• How does your solution use AI?</li>
+                  <li>• What AI Tools / Platforms have you used</li>
+                  <li>• How does your solution help the user? (example-time saved…)</li>
+                  <li>• Please share GOOGLE DRIVE link having your project demo video, files and images</li>
+                  <li>• Explain your solution in detail (For ex. what you did, why is this useful)</li>
+                  <li>• What was the biggest challenge you faced during this hackathon?</li>
+                  <li className="text-muted-foreground/80">Optional: Score and Reason</li>
+                </ul>
+              </details>
+              <p className="text-xs">
+                Use <code className="rounded bg-muted px-1.5 py-0.5">sample-submissions.csv</code> as a template.
+              </p>
+            </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 sm:px-6">
             <div
               onDragOver={(e) => {
                 e.preventDefault();
@@ -684,23 +706,23 @@ export function Dashboard() {
               }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
-              className={`relative border-2 border-dashed rounded-xl p-14 text-center transition-all duration-500 ease-out ${
+              className={`relative border-2 border-dashed rounded-xl p-6 sm:p-10 md:p-14 text-center transition-all duration-500 ease-out ${
                 isDragging
                   ? "border-primary bg-primary/10 scale-[1.01] shadow-glow"
                   : "border-border hover:border-primary/50 hover:bg-muted/50"
               }`}
             >
-              <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl transition-colors ${
+              <div className={`mx-auto mb-3 sm:mb-4 flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-2xl transition-colors ${
                 isDragging ? "bg-primary/20" : "bg-muted"
               }`}>
                 <Upload className={`h-8 w-8 transition-colors ${
                   isDragging ? "text-primary" : "text-muted-foreground"
                 }`} />
               </div>
-              <p className="text-base font-medium text-foreground mb-1">
+              <p className="text-sm sm:text-base font-medium text-foreground mb-1">
                 {isDragging ? "Drop your file here" : "Drag and drop your CSV here"}
               </p>
-              <p className="text-sm text-muted-foreground mb-6">
+              <p className="text-xs sm:text-sm text-muted-foreground mb-4 sm:mb-6">
                 or click to browse from your computer
               </p>
               <input
@@ -728,47 +750,47 @@ export function Dashboard() {
         {projects.length > 0 && (
           <>
             {/* Stats bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 animate-in-fade">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 animate-in-fade">
               <Card className="shadow-soft">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <BarChart3 className="h-5 w-5" />
+                <CardContent className="p-3 sm:p-4 flex items-center gap-2 sm:gap-3">
+                  <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-primary/10 text-primary shrink-0">
+                    <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5" />
                   </div>
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">{projects.length}</p>
+                  <div className="min-w-0">
+                    <p className="text-xl sm:text-2xl font-bold text-foreground truncate">{projects.length}</p>
                     <p className="text-xs text-muted-foreground">Total Projects</p>
                   </div>
                 </CardContent>
               </Card>
               <Card className="shadow-soft">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-2/20 text-chart-2">
-                    <CheckCircle2 className="h-5 w-5" />
+                <CardContent className="p-3 sm:p-4 flex items-center gap-2 sm:gap-3">
+                  <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-chart-2/20 text-chart-2 shrink-0">
+                    <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5" />
                   </div>
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">{processedCount}</p>
+                  <div className="min-w-0">
+                    <p className="text-xl sm:text-2xl font-bold text-foreground truncate">{processedCount}</p>
                     <p className="text-xs text-muted-foreground">Processed</p>
                   </div>
                 </CardContent>
               </Card>
               <Card className="shadow-soft">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-3/20 text-chart-3">
-                    <Clock className="h-5 w-5" />
+                <CardContent className="p-3 sm:p-4 flex items-center gap-2 sm:gap-3">
+                  <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-chart-3/20 text-chart-3 shrink-0">
+                    <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
                   </div>
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">{pendingCount}</p>
+                  <div className="min-w-0">
+                    <p className="text-xl sm:text-2xl font-bold text-foreground truncate">{pendingCount}</p>
                     <p className="text-xs text-muted-foreground">Pending</p>
                   </div>
                 </CardContent>
               </Card>
               <Card className="shadow-soft sm:col-span-1">
-                <CardContent className="p-4 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-1/20 text-chart-1">
-                    <Sparkles className="h-5 w-5" />
+                <CardContent className="p-3 sm:p-4 flex items-center gap-2 sm:gap-3">
+                  <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-chart-1/20 text-chart-1 shrink-0">
+                    <Sparkles className="h-4 w-4 sm:h-5 sm:w-5" />
                   </div>
-                  <div>
-                    <p className="text-2xl font-bold text-foreground">
+                  <div className="min-w-0">
+                    <p className="text-xl sm:text-2xl font-bold text-foreground truncate">
                       {processedCount > 0 ? Math.round((processedCount / projects.length) * 100) : 0}%
                     </p>
                     <p className="text-xs text-muted-foreground">Complete</p>
@@ -777,21 +799,21 @@ export function Dashboard() {
               </Card>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center animate-in-fade">
-              <div className="relative w-full sm:w-96">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-between items-stretch sm:items-center animate-in-fade">
+              <div className="relative w-full sm:w-80 md:w-96">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search by project title..."
+                  placeholder="Search projects..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-11 rounded-lg focus-visible:ring-2"
+                  className="pl-9 sm:pl-10 h-10 sm:h-11 rounded-lg focus-visible:ring-2 text-sm sm:text-base"
                 />
               </div>
               <div className="flex gap-2 w-full sm:w-auto">
                 <Button
                   onClick={processAll}
                   disabled={isProcessing}
-                  className="gap-2 flex-1 sm:flex-initial h-11 px-6 bg-primary hover:bg-primary/90"
+                  className="gap-1.5 sm:gap-2 flex-1 sm:flex-initial h-10 sm:h-11 px-4 sm:px-6 text-sm bg-primary hover:bg-primary/90"
                 >
                   {isProcessing ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -803,7 +825,7 @@ export function Dashboard() {
                 <Button
                   variant="outline"
                   onClick={handleExport}
-                  className="gap-2 flex-1 sm:flex-initial h-11 px-6"
+                  className="gap-1.5 sm:gap-2 flex-1 sm:flex-initial h-10 sm:h-11 px-4 sm:px-6 text-sm"
                 >
                   <Download className="h-4 w-4" />
                   Export CSV
@@ -813,15 +835,15 @@ export function Dashboard() {
 
             <Card className="shadow-soft overflow-hidden animate-in-slide">
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full">
+                <div className="overflow-x-auto -mx-2 sm:mx-0">
+                  <table className="w-full min-w-[500px]">
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left p-4 font-semibold text-foreground w-14 shrink-0">
+                        <th className="text-left p-2 sm:p-4 font-semibold text-foreground w-10 sm:w-14 shrink-0 text-xs sm:text-base">
                           S.No
                         </th>
                         <th
-                          className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
+                          className="text-left p-2 sm:p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
                           onClick={() => toggleSort("title")}
                         >
                           <span className="flex items-center gap-1">
@@ -830,7 +852,7 @@ export function Dashboard() {
                           </span>
                         </th>
                         <th
-                          className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
+                          className="text-left p-2 sm:p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
                           onClick={() => toggleSort("score")}
                         >
                           <span className="flex items-center gap-1">
@@ -839,7 +861,7 @@ export function Dashboard() {
                           </span>
                         </th>
                         <th
-                          className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
+                          className="text-left p-2 sm:p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
                           onClick={() => toggleSort("rank")}
                         >
                           <span className="flex items-center gap-1">
@@ -848,7 +870,7 @@ export function Dashboard() {
                           </span>
                         </th>
                         <th
-                          className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
+                          className="text-left p-2 sm:p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
                           onClick={() => toggleSort("status")}
                         >
                           <span className="flex items-center gap-1">
@@ -867,20 +889,20 @@ export function Dashboard() {
                           }`}
                           onClick={() => setSelectedProject(project)}
                         >
-                          <td className="p-4 text-muted-foreground font-medium w-14">
+                          <td className="p-2 sm:p-4 text-muted-foreground font-medium w-10 sm:w-14 text-xs sm:text-base">
                             {idx + 1}
                           </td>
-                          <td className="p-4 font-medium text-foreground">
+                          <td className="p-2 sm:p-4 font-medium text-foreground text-sm sm:text-base max-w-[100px] sm:max-w-[200px] md:max-w-none truncate">
                             {project["Project Title"] || "Untitled"}
                           </td>
-                          <td className="p-4">
+                          <td className="p-2 sm:p-4">
                             {project.evaluation ? (
                               getScoreBadge(project.evaluation.score)
                             ) : (
                               <span className="text-muted-foreground">—</span>
                             )}
                           </td>
-                          <td className="p-4">
+                          <td className="p-2 sm:p-4">
                             {rankMap.has(project.id) ? (
                               <span className="font-medium text-foreground">
                                 #{rankMap.get(project.id)}
@@ -889,7 +911,7 @@ export function Dashboard() {
                               <span className="text-muted-foreground">—</span>
                             )}
                           </td>
-                          <td className="p-4">
+                          <td className="p-2 sm:p-4">
                             {getStatusBadge(project.status)}
                           </td>
                         </tr>
@@ -904,11 +926,11 @@ export function Dashboard() {
 
         {projects.length === 0 && (
           <Card className="border-dashed border-border bg-muted/30 animate-in-scale">
-            <CardContent className="flex flex-col items-center justify-center py-20 text-center">
+            <CardContent className="flex flex-col items-center justify-center py-12 sm:py-20 text-center px-4">
               <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-muted mb-6 animate-in-fade">
                 <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
               </div>
-              <h3 className="text-2xl font-bold mb-2">
+              <h3 className="text-xl sm:text-2xl font-bold mb-2">
                 <span className="inline-block text-glow">
                   <ShinyText
                     text="No projects yet"
@@ -941,7 +963,7 @@ export function Dashboard() {
         open={!!selectedProject}
         onOpenChange={(open) => !open && setSelectedProject(null)}
       >
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto shadow-xl">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-5xl max-h-[90vh] overflow-y-auto shadow-xl mx-4 p-4 sm:p-6">
           {selectedProject && (
             <>
               <DialogHeader className="space-y-1">
@@ -957,7 +979,7 @@ export function Dashboard() {
                     : "View submission details"}
                 </p>
               </DialogHeader>
-              <div className="grid md:grid-cols-2 gap-6 mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-4 sm:mt-6">
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b border-border">
                     <FileSpreadsheet className="h-4 w-4 text-primary" />

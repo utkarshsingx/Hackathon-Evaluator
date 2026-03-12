@@ -2,13 +2,36 @@ import Papa from "papaparse";
 import type { HackathonProject, EvaluatedProject } from "./types";
 import { REQUIRED_CSV_HEADERS } from "./types";
 
+// Alternate headers that map to our canonical names (for flexible CSV support)
+const HEADER_ALIASES: Record<string, string> = {
+  "Email Address": "Email",
+  "Number": "Phone Number",
+  "Reaseon for selection": "Score and Reason",
+  "Reason for selection": "Score and Reason",
+  "Biggest challenge": "What was the biggest challenge you faced during this hackathon?",
+  "Biggest Challenge": "What was the biggest challenge you faced during this hackathon?",
+};
+
+function normalizeHeader(h: string): string {
+  return h.replace(/^\uFEFF/, "").trim();
+}
+
+function resolveHeader(actualHeaders: string[], canonical: string): string | null {
+  const normalized = new Map<string, string>();
+  for (const h of actualHeaders) {
+    const n = normalizeHeader(h);
+    normalized.set(n, h);
+    if (HEADER_ALIASES[n] === canonical) return h;
+    if (n === canonical) return h;
+  }
+  return normalized.get(canonical) ?? null;
+}
+
 // Original CSV column order (matches submission form)
 const ORIGINAL_CSV_COLUMNS = [
   ...REQUIRED_CSV_HEADERS,
   "Score and Reason",
 ] as const;
-
-const EVALUATION_COLUMNS = ["Marks", "Reason", "Pros", "Cons"] as const;
 
 export interface CSVValidationResult {
   valid: boolean;
@@ -19,13 +42,17 @@ export interface CSVValidationResult {
 }
 
 export function validateCSVHeaders(headers: string[]): CSVValidationResult {
-  const expectedSet = new Set(REQUIRED_CSV_HEADERS);
-  const actualSet = new Set(headers.map((h) => h.trim()));
-  const missingHeaders: string[] = [];
+  const normalizedSet = new Set<string>();
+  for (const h of headers) {
+    const n = normalizeHeader(h);
+    normalizedSet.add(n);
+    if (HEADER_ALIASES[n]) normalizedSet.add(HEADER_ALIASES[n]);
+  }
 
-  for (const h of expectedSet) {
-    if (!actualSet.has(h)) {
-      missingHeaders.push(h);
+  const missingHeaders: string[] = [];
+  for (const required of REQUIRED_CSV_HEADERS) {
+    if (!normalizedSet.has(required)) {
+      missingHeaders.push(required);
     }
   }
 
@@ -69,25 +96,46 @@ export function parseCSV(file: File): Promise<HackathonProject[]> {
         }
 
         const data = results.data as Record<string, string>[];
+        const rawHeaders = (results.meta.fields || []) as string[];
         const projects: HackathonProject[] = [];
+
+        const getVal = (row: Record<string, string>, canonical: string): string => {
+          const key = resolveHeader(rawHeaders, canonical);
+          if (key && key in row) return String(row[key] ?? "").trim();
+          for (const [alt, canon] of Object.entries(HEADER_ALIASES)) {
+            if (canon === canonical && alt in row) return String(row[alt] ?? "").trim();
+          }
+          if (canonical.includes("biggest challenge")) {
+            const match = rawHeaders.find((h) =>
+              normalizeHeader(h).toLowerCase().includes("biggest challenge")
+            );
+            if (match && match in row) return String(row[match] ?? "").trim();
+          }
+          return "";
+        };
+
+        const getValOpt = (row: Record<string, string>, canonical: string): string | undefined => {
+          const v = getVal(row, canonical);
+          return v || undefined;
+        };
 
         for (let i = 0; i < data.length; i++) {
           const row = data[i];
           const project: HackathonProject = {
             id: `project-${i + 1}-${Date.now()}`,
-            Timestamp: row["Timestamp"] ?? "",
-            Email: row["Email"] ?? "",
-            "Phone Number": row["Phone Number"] ?? "",
-            "Project Title": row["Project Title"] ?? "",
-            "What real-world problem are you solving?": row["What real-world problem are you solving?"] ?? "",
-            "Who is this problem for? (Profession / domain / user type)": row["Who is this problem for? (Profession / domain / user type)"] ?? "",
-            "How does your solution use AI?": row["How does your solution use AI?"] ?? "",
-            "What AI Tools / Platforms have you used": row["What AI Tools / Platforms have you used"] ?? "",
-            "How does your solution help the user? (example-time saved, cost reduced, effort reduced, revenue increased)": row["How does your solution help the user? (example-time saved, cost reduced, effort reduced, revenue increased)"] ?? "",
-            "Please share GOOGLE DRIVE link having your project demo video, files and images": row["Please share GOOGLE DRIVE link having your project demo video, files and images"] ?? "",
-            "Explain your solution in detail (For ex. what you did, why is this useful)": row["Explain your solution in detail (For ex. what you did, why is this useful)"] ?? "",
-            "What was the biggest challenge you faced during this hackathon?": row["What was the biggest challenge you faced during this hackathon?"] ?? "",
-            "Score and Reason": row["Score and Reason"] ?? undefined,
+            Timestamp: getVal(row, "Timestamp"),
+            Email: getVal(row, "Email"),
+            "Phone Number": getVal(row, "Phone Number"),
+            "Project Title": getVal(row, "Project Title"),
+            "What real-world problem are you solving?": getVal(row, "What real-world problem are you solving?"),
+            "Who is this problem for? (Profession / domain / user type)": getVal(row, "Who is this problem for? (Profession / domain / user type)"),
+            "How does your solution use AI?": getVal(row, "How does your solution use AI?"),
+            "What AI Tools / Platforms have you used": getVal(row, "What AI Tools / Platforms have you used"),
+            "How does your solution help the user? (example-time saved, cost reduced, effort reduced, revenue increased)": getVal(row, "How does your solution help the user? (example-time saved, cost reduced, effort reduced, revenue increased)"),
+            "Please share GOOGLE DRIVE link having your project demo video, files and images": getVal(row, "Please share GOOGLE DRIVE link having your project demo video, files and images"),
+            "Explain your solution in detail (For ex. what you did, why is this useful)": getVal(row, "Explain your solution in detail (For ex. what you did, why is this useful)"),
+            "What was the biggest challenge you faced during this hackathon?": getVal(row, "What was the biggest challenge you faced during this hackathon?"),
+            "Score and Reason": getValOpt(row, "Score and Reason"),
           };
           projects.push(project);
         }
