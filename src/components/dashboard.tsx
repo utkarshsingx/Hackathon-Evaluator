@@ -30,13 +30,14 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import { evaluateProject } from "@/lib/gemini";
+import { evaluateProject, type AIProvider } from "@/lib/ai";
 import { parseCSV, exportToCSV, downloadCSV, CSVValidationError } from "@/lib/csv";
 import type { EvaluatedProject, HackathonProject, JudgingCriterion } from "@/lib/types";
 import { DEFAULT_CRITERIA } from "@/lib/types";
 import ShinyText from "@/components/ShinyText";
 
-const API_KEY_STORAGE = "gemini-api-key";
+const API_KEY_STORAGE = "hackathon-api-key";
+const API_PROVIDER_STORAGE = "hackathon-api-provider";
 const CRITERIA_STORAGE = "hackathon-judging-criteria";
 const PROJECTS_STORAGE = "hackathon-projects";
 const BATCH_SIZE = 5;
@@ -44,6 +45,7 @@ const BATCH_DELAY_MS = 2000;
 
 export function Dashboard() {
   const [apiKey, setApiKey] = useState("");
+  const [apiProvider, setApiProvider] = useState<AIProvider>("gemini");
   const [showSettings, setShowSettings] = useState(false);
   const [projects, setProjects] = useState<EvaluatedProject[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -64,8 +66,18 @@ export function Dashboard() {
 
   // Load API key, criteria, and projects from localStorage on mount
   useEffect(() => {
-    const stored = localStorage.getItem(API_KEY_STORAGE);
+    let stored = localStorage.getItem(API_KEY_STORAGE);
+    if (!stored) {
+      const legacy = localStorage.getItem("gemini-api-key");
+      if (legacy) {
+        localStorage.setItem(API_KEY_STORAGE, legacy);
+        localStorage.removeItem("gemini-api-key");
+        stored = legacy;
+      }
+    }
     if (stored) setApiKey(stored);
+    const storedProvider = localStorage.getItem(API_PROVIDER_STORAGE);
+    if (storedProvider === "openai" || storedProvider === "gemini") setApiProvider(storedProvider);
     const storedCriteria = localStorage.getItem(CRITERIA_STORAGE);
     if (storedCriteria) {
       try {
@@ -99,9 +111,10 @@ export function Dashboard() {
     const key = apiKey.trim();
     if (key) {
       localStorage.setItem(API_KEY_STORAGE, key);
+      localStorage.setItem(API_PROVIDER_STORAGE, apiProvider);
       toast({
         title: "API Key saved",
-        description: "Your API key has been stored securely.",
+        description: `Using ${apiProvider === "openai" ? "OpenAI" : "Gemini"}. Key stored securely.`,
         variant: "success",
       });
       setShowSettings(false);
@@ -112,7 +125,7 @@ export function Dashboard() {
         variant: "destructive",
       });
     }
-  }, [apiKey, toast]);
+  }, [apiKey, apiProvider, toast]);
 
   const handleFileUpload = useCallback(
     async (file: File) => {
@@ -230,7 +243,8 @@ export function Dashboard() {
                 }
               })()
             : [...DEFAULT_CRITERIA];
-          const result = await evaluateProject(storedKey, project, judgingCriteria);
+          const storedProvider = (localStorage.getItem(API_PROVIDER_STORAGE) || "gemini") as AIProvider;
+          const result = await evaluateProject(storedKey, project, judgingCriteria, storedProvider);
           setProjects((prev) =>
             prev.map((p) =>
               p.id === project.id
@@ -448,15 +462,41 @@ export function Dashboard() {
               <div className="space-y-4">
                 <h3 className="font-semibold text-sm text-foreground">API Key</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Enter your API key. It will be stored locally in your browser
-                  (localStorage) and never sent to our servers.
+                  Choose your provider and enter the API key. Stored locally in your browser.
                 </p>
                 <div className="space-y-2">
-                  <Label htmlFor="api-key">API Key</Label>
+                  <Label>Provider</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={apiProvider === "gemini" ? "default" : "outline"}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setApiProvider("gemini")}
+                    >
+                      Google Gemini
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={apiProvider === "openai" ? "default" : "outline"}
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setApiProvider("openai")}
+                    >
+                      OpenAI
+                    </Button>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="api-key">
+                    API Key
+                    {apiProvider === "gemini" && " (Google AI Studio)"}
+                    {apiProvider === "openai" && " (platform.openai.com)"}
+                  </Label>
                   <Input
                     id="api-key"
                     type="password"
-                    placeholder="Enter your API key"
+                    placeholder={apiProvider === "gemini" ? "Gemini API key" : "sk-..."}
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && saveApiKey()}
@@ -482,9 +522,9 @@ export function Dashboard() {
                   {criteria.map((c, idx) => (
                     <div
                       key={idx}
-                      className="p-3 rounded-lg border border-border bg-muted/30 space-y-2"
+                      className="p-3 rounded-lg border border-border bg-muted/30 space-y-2 overflow-hidden"
                     >
-                      <div className="flex gap-2 items-center">
+                      <div className="flex gap-2 items-center min-w-0">
                         <span className="text-sm font-medium text-muted-foreground w-6 shrink-0">
                           {idx + 1}.
                         </span>
@@ -538,7 +578,7 @@ export function Dashboard() {
                           setCriteria(next);
                           localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(next));
                         }}
-                        className="h-8 text-sm ml-8"
+                        className="h-8 text-sm w-full min-w-0"
                       />
                     </div>
                   ))}

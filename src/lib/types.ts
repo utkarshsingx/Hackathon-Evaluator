@@ -24,12 +24,12 @@ export interface JudgingCriterion {
   description?: string;
 }
 
-// Default criteria (can be overridden in Settings)
+// Default criteria (total 100 marks, can be overridden in Settings)
 export const DEFAULT_CRITERIA: JudgingCriterion[] = [
-  { name: "Uniqueness", points: 2, description: "How original and innovative is the idea?" },
-  { name: "Problem Solving", points: 3, description: "How well does it address a real-world problem?" },
-  { name: "Approach", points: 2, description: "How sound is the technical approach and AI integration?" },
-  { name: "Resilience", points: 3, description: "How well did the team overcome challenges and demonstrate persistence?" },
+  { name: "Uniqueness", points: 20, description: "How original and innovative is the idea?" },
+  { name: "Problem Solving", points: 30, description: "How well does it address a real-world problem?" },
+  { name: "Approach", points: 20, description: "How sound is the technical approach and AI integration?" },
+  { name: "Resilience", points: 30, description: "How well did the team overcome challenges and demonstrate persistence?" },
 ];
 
 // AI evaluation result

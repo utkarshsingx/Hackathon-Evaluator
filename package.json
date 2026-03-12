@@ -20,6 +20,7 @@
     "lucide-react": "^0.460.0",
     "motion": "^12.36.0",
     "next": "14.2.18",
+    "openai": "^6.27.0",
     "papaparse": "^5.4.1",
     "postprocessing": "^6.38.3",
     "react": "^18.3.1",

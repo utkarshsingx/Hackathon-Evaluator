@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { evaluateProject } from "@/lib/gemini";
+import { evaluateProject, type AIProvider } from "@/lib/ai";
 import type { HackathonProject } from "@/lib/types";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { apiKey, project } = body as {
+    const { apiKey, project, provider } = body as {
       apiKey: string;
       project: HackathonProject;
+      provider?: AIProvider;
     };
 
     if (!apiKey?.trim()) {
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await evaluateProject(apiKey, project);
+    const result = await evaluateProject(apiKey, project, undefined, provider || "gemini");
     return NextResponse.json(result);
   } catch (error) {
     const message =

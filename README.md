@@ -10,7 +10,7 @@ A modern, responsive React + Next.js dashboard to evaluate hackathon projects fr
 ## ✨ Features
 
 ### Core Functionality
-- **API Key Setup** — Securely store your API key in localStorage via the Settings button
+- **API Key Setup** — Use Gemini or OpenAI; store API key in localStorage via Settings
 - **CSV Upload** — Drag-and-drop or click to upload submissions with validated headers
 - **Automated Evaluation** — Process all projects with AI using custom judging criteria
 - **Dashboard** — Searchable, sortable table with Project Title, Score, and Status
@@ -24,11 +24,11 @@ A modern, responsive React + Next.js dashboard to evaluate hackathon projects fr
 - **Smooth Animations** — Fade, slide, and scale transitions on key sections
 - **Glow Effects** — Primary-colored glow on empty state heading
 
-### Judging Criteria
-- Uniqueness (2 pts)
-- Problem Solving (3 pts)
-- Approach (2 pts)
-- Resilience (3 pts)
+### Judging Criteria (default total: 100)
+- Uniqueness (20 pts)
+- Problem Solving (30 pts)
+- Approach (20 pts)
+- Resilience (30 pts)
 
 ## 🛠 Tech Stack
 
@@ -36,14 +36,16 @@ A modern, responsive React + Next.js dashboard to evaluate hackathon projects fr
 |----------|------------|
 | Framework | Next.js 14, React 18 |
 | Styling | Tailwind CSS v3, shadcn/ui |
-| AI | Google Generative AI (Gemini) |
+| AI | Gemini or OpenAI |
 | CSV | PapaParse |
 | Animation | Motion, Three.js, Postprocessing |
 
 ## 📋 Prerequisites
 
 - **Node.js 18+** (required for Next.js)
-- A [Google AI Studio API key](https://aistudio.google.com/apikey) (Gemini)
+- An API key from either:
+  - [Google AI Studio](https://aistudio.google.com/apikey) (Gemini)
+  - [OpenAI Platform](https://platform.openai.com/api-keys) (OpenAI)
 
 ## 🚀 Getting Started
 
@@ -101,7 +103,7 @@ src/
 │   ├── theme-provider.tsx
 │   └── theme-toggle.tsx
 └── lib/
-    ├── gemini.ts         # AI API service
+    ├── ai.ts             # AI API (Gemini + OpenAI)
     ├── csv.ts            # CSV parsing & export
     ├── types.ts          # TypeScript types
     └── utils.ts          # Utilities
