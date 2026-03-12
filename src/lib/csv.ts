@@ -118,7 +118,7 @@ export function exportToCSV(projects: EvaluatedProject[]): string {
 
     // Original CSV fields (preserve order)
     for (const col of ORIGINAL_CSV_COLUMNS) {
-      const val = (p as Record<string, unknown>)[col];
+      const val = col in p ? (p as unknown as Record<string, unknown>)[col] : undefined;
       row[col] = val != null ? String(val) : "";
     }
 

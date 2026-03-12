@@ -48,7 +48,7 @@ export function Dashboard() {
   const [projects, setProjects] = useState<EvaluatedProject[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortConfig, setSortConfig] = useState<{
-    key: "title" | "score" | "status";
+    key: "title" | "score" | "status" | "rank";
     direction: "asc" | "desc";
   } | null>(null);
   const [selectedProject, setSelectedProject] =
@@ -319,13 +319,33 @@ export function Dashboard() {
       const sa = a.evaluation?.score ?? -1;
       const sb = b.evaluation?.score ?? -1;
       cmp = sa - sb;
+    } else if (key === "rank") {
+      const sa = a.evaluation?.score ?? -1;
+      const sb = b.evaluation?.score ?? -1;
+      cmp = sb - sa;
     } else {
       cmp = a.status.localeCompare(b.status);
     }
     return direction === "asc" ? cmp : -cmp;
   });
 
-  const toggleSort = (key: "title" | "score" | "status") => {
+  const sortedByScore = [...filteredProjects].sort((a, b) => {
+    const sa = a.evaluation?.score ?? -1;
+    const sb = b.evaluation?.score ?? -1;
+    return sb - sa;
+  });
+  const rankMap = new Map<string, number>();
+  let rank = 1;
+  let prevScore: number | null = null;
+  for (const p of sortedByScore) {
+    if (p.evaluation) {
+      if (prevScore !== null && p.evaluation.score < prevScore) rank++;
+      rankMap.set(p.id, rank);
+      prevScore = p.evaluation.score;
+    }
+  }
+
+  const toggleSort = (key: "title" | "score" | "status" | "rank") => {
     setSortConfig((prev) => {
       if (prev?.key === key) {
         return { key, direction: prev.direction === "asc" ? "desc" : "asc" };
@@ -337,7 +357,7 @@ export function Dashboard() {
   const SortIcon = ({
     column,
   }: {
-    column: "title" | "score" | "status";
+    column: "title" | "score" | "status" | "rank";
   }) => {
     if (sortConfig?.key !== column) return null;
     return sortConfig.direction === "asc" ? (
@@ -780,6 +800,15 @@ export function Dashboard() {
                         </th>
                         <th
                           className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
+                          onClick={() => toggleSort("rank")}
+                        >
+                          <span className="flex items-center gap-1">
+                            Rank
+                            <SortIcon column="rank" />
+                          </span>
+                        </th>
+                        <th
+                          className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
                           onClick={() => toggleSort("status")}
                         >
                           <span className="flex items-center gap-1">
@@ -807,6 +836,15 @@ export function Dashboard() {
                           <td className="p-4">
                             {project.evaluation ? (
                               getScoreBadge(project.evaluation.score)
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="p-4">
+                            {rankMap.has(project.id) ? (
+                              <span className="font-medium text-foreground">
+                                #{rankMap.get(project.id)}
+                              </span>
                             ) : (
                               <span className="text-muted-foreground">—</span>
                             )}

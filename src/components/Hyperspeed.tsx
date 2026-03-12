@@ -657,7 +657,8 @@ class CarLights {
     const curve = new THREE.LineCurve3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -1));
     const geometry = new THREE.TubeGeometry(curve, 40, 1, 8, false);
 
-    const instanced = new THREE.InstancedBufferGeometry().copy(geometry as THREE.BufferGeometry) as THREE.InstancedBufferGeometry;
+    const instanced = new THREE.InstancedBufferGeometry();
+    THREE.BufferGeometry.prototype.copy.call(instanced, geometry);
     instanced.instanceCount = options.lightPairsPerRoadWay * 2;
 
     const laneWidth = options.roadWidth / options.lanesPerRoad;
@@ -769,7 +770,8 @@ class LightsSticks {
   init() {
     const options = this.options;
     const geometry = new THREE.PlaneGeometry(1, 1);
-    const instanced = new THREE.InstancedBufferGeometry().copy(geometry as THREE.BufferGeometry) as THREE.InstancedBufferGeometry;
+    const instanced = new THREE.InstancedBufferGeometry();
+    THREE.BufferGeometry.prototype.copy.call(instanced, geometry);
     const totalSticks = options.totalSideLightSticks;
     instanced.instanceCount = totalSticks;
 
@@ -1091,15 +1093,15 @@ class App {
 
       const searchImage = new Image();
       const areaImage = new Image();
-      (assets as Record<string, Record<string, Image>>).smaa = {};
+      (assets as Record<string, Record<string, HTMLImageElement>>).smaa = {};
 
       searchImage.addEventListener("load", function () {
-        (assets as Record<string, Record<string, Image>>).smaa.search = this;
+        (assets as Record<string, Record<string, HTMLImageElement>>).smaa.search = this;
         manager.itemEnd("smaa-search");
       });
 
       areaImage.addEventListener("load", function () {
-        (assets as Record<string, Record<string, Image>>).smaa.area = this;
+        (assets as Record<string, Record<string, HTMLImageElement>>).smaa.area = this;
         manager.itemEnd("smaa-area");
       });
 
