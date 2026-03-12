@@ -63,22 +63,23 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ## 📁 CSV Format
 
-Your CSV must include these exact headers:
+Your CSV must include these exact headers (column names must match exactly):
 
-| Column | Description |
-|--------|-------------|
-| Timestamp | Submission timestamp |
-| Email | Participant email |
-| Phone Number | Contact number |
-| Project Title | Name of the project |
-| What real-world problem are you solving? | Problem statement |
-| Who is this problem for? | Target audience |
-| How does your solution use AI? | AI integration details |
-| What AI Tools / Platforms have you used | Tools used |
-| How does your solution help the user? | Value proposition |
-| Demo Link | URL to demo |
-| Detailed Explanation | Full description |
-| Biggest Challenge | Main obstacle |
+| Column | Required |
+|--------|----------|
+| Timestamp | ✓ |
+| Email | ✓ |
+| Phone Number | ✓ |
+| Project Title | ✓ |
+| What real-world problem are you solving? | ✓ |
+| Who is this problem for? (Profession / domain / user type) | ✓ |
+| How does your solution use AI? | ✓ |
+| What AI Tools / Platforms have you used | ✓ |
+| How does your solution help the user? (example-time saved, cost reduced, effort reduced, revenue increased) | ✓ |
+| Please share GOOGLE DRIVE link having your project demo video, files and images | ✓ |
+| Explain your solution in detail (For ex. what you did, why is this useful) | ✓ |
+| What was the biggest challenge you faced during this hackathon? | ✓ |
+| Score and Reason | optional |
 
 See `sample-submissions.csv` for a template.
 

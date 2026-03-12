@@ -1,19 +1,23 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import type { HackathonProject, EvaluationResult } from "./types";
+import type { HackathonProject, EvaluationResult, JudgingCriterion } from "./types";
+import { DEFAULT_CRITERIA } from "./types";
 
 const GEMINI_MODEL = "gemini-2.5-flash";
 
-const JUDGING_CRITERIA = `
-Judging Criteria (Total: 10 points):
-- Uniqueness (2 points): How original and innovative is the idea?
-- Problem Solving (3 points): How well does it address a real-world problem?
-- Approach (2 points): How sound is the technical approach and AI integration?
-- Resilience (3 points): How well did the team overcome challenges and demonstrate persistence?
-`;
+function buildCriteriaText(criteria: JudgingCriterion[]): string {
+  const total = criteria.reduce((sum, c) => sum + c.points, 0);
+  const lines = criteria.map(
+    (c) => `- ${c.name} (${c.points} point${c.points !== 1 ? "s" : ""}): ${c.description || "Evaluate this aspect."}`
+  );
+  return `Judging Criteria (Total: ${total} points):\n${lines.join("\n")}`;
+}
 
-const EVALUATION_PROMPT = `You are an expert hackathon judge. Evaluate the following project submission based on the judging criteria.
+function buildEvaluationPrompt(criteria: JudgingCriterion[]): string {
+  const criteriaBlock = buildCriteriaText(criteria);
+  const maxScore = criteria.reduce((sum, c) => sum + c.points, 0);
+  return `You are an expert hackathon judge. Evaluate the following project submission based on the judging criteria.
 
-${JUDGING_CRITERIA}
+${criteriaBlock}
 
 Project Submission:
 - Project Title: {{projectTitle}}
@@ -28,23 +32,26 @@ Project Submission:
 
 Respond with ONLY a valid JSON object (no markdown, no code blocks) with this exact structure:
 {
-  "score": <number 0-10>,
+  "score": <number 0-${"{{maxScore}}"}>,
   "reason_why": "<50-100 words explaining the score>",
   "pros": ["<pro 1>", "<pro 2>", "<pro 3>"],
   "cons": ["<con 1>", "<con 2>"]
 }`;
+}
 
-function buildPrompt(project: HackathonProject): string {
-  return EVALUATION_PROMPT
+function buildPrompt(project: HackathonProject, criteria: JudgingCriterion[]): string {
+  const maxScore = criteria.reduce((sum, c) => sum + c.points, 0);
+  return buildEvaluationPrompt(criteria)
+    .replace("{{maxScore}}", String(maxScore))
     .replace("{{projectTitle}}", project["Project Title"] || "N/A")
     .replace("{{problem}}", project["What real-world problem are you solving?"] || "N/A")
-    .replace("{{audience}}", project["Who is this problem for?"] || "N/A")
+    .replace("{{audience}}", project["Who is this problem for? (Profession / domain / user type)"] || "N/A")
     .replace("{{aiUsage}}", project["How does your solution use AI?"] || "N/A")
     .replace("{{aiTools}}", project["What AI Tools / Platforms have you used"] || "N/A")
-    .replace("{{userBenefit}}", project["How does your solution help the user?"] || "N/A")
-    .replace("{{demoLink}}", project["Demo Link"] || "N/A")
-    .replace("{{detailedExplanation}}", project["Detailed Explanation"] || "N/A")
-    .replace("{{biggestChallenge}}", project["Biggest Challenge"] || "N/A");
+    .replace("{{userBenefit}}", project["How does your solution help the user? (example-time saved, cost reduced, effort reduced, revenue increased)"] || "N/A")
+    .replace("{{demoLink}}", project["Please share GOOGLE DRIVE link having your project demo video, files and images"] || "N/A")
+    .replace("{{detailedExplanation}}", project["Explain your solution in detail (For ex. what you did, why is this useful)"] || "N/A")
+    .replace("{{biggestChallenge}}", project["What was the biggest challenge you faced during this hackathon?"] || "N/A");
 }
 
 function parseJsonResponse(text: string): EvaluationResult {
@@ -81,16 +88,18 @@ function parseJsonResponse(text: string): EvaluationResult {
 
 export async function evaluateProject(
   apiKey: string,
-  project: HackathonProject
+  project: HackathonProject,
+  criteria?: JudgingCriterion[]
 ): Promise<EvaluationResult> {
   if (!apiKey?.trim()) {
     throw new Error("API key is required");
   }
 
+  const judgingCriteria = criteria && criteria.length > 0 ? criteria : [...DEFAULT_CRITERIA];
   const genAI = new GoogleGenerativeAI(apiKey.trim());
   const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
-  const prompt = buildPrompt(project);
+  const prompt = buildPrompt(project, judgingCriteria);
 
   const result = await model.generateContent(prompt);
   const response = result.response;

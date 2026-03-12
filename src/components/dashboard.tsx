@@ -16,6 +16,8 @@ import {
   FileSpreadsheet,
   Sparkles,
   BarChart3,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,11 +31,14 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import { evaluateProject } from "@/lib/gemini";
-import { parseCSV, exportToCSV, downloadCSV } from "@/lib/csv";
-import type { EvaluatedProject, HackathonProject } from "@/lib/types";
+import { parseCSV, exportToCSV, downloadCSV, CSVValidationError } from "@/lib/csv";
+import type { EvaluatedProject, HackathonProject, JudgingCriterion } from "@/lib/types";
+import { DEFAULT_CRITERIA } from "@/lib/types";
 import ShinyText from "@/components/ShinyText";
 
 const API_KEY_STORAGE = "gemini-api-key";
+const CRITERIA_STORAGE = "hackathon-judging-criteria";
+const PROJECTS_STORAGE = "hackathon-projects";
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 2000;
 
@@ -50,13 +55,45 @@ export function Dashboard() {
     useState<EvaluatedProject | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [csvError, setCsvError] = useState<{
+    title: string;
+    validation: import("@/lib/csv").CSVValidationResult;
+  } | null>(null);
+  const [criteria, setCriteria] = useState<JudgingCriterion[]>(DEFAULT_CRITERIA);
   const { toast } = useToast();
 
-  // Load API key from localStorage on mount
+  // Load API key, criteria, and projects from localStorage on mount
   useEffect(() => {
     const stored = localStorage.getItem(API_KEY_STORAGE);
     if (stored) setApiKey(stored);
+    const storedCriteria = localStorage.getItem(CRITERIA_STORAGE);
+    if (storedCriteria) {
+      try {
+        const parsed = JSON.parse(storedCriteria) as JudgingCriterion[];
+        if (Array.isArray(parsed) && parsed.length > 0) setCriteria(parsed);
+      } catch {
+        // ignore invalid stored criteria
+      }
+    }
+    const storedProjects = localStorage.getItem(PROJECTS_STORAGE);
+    if (storedProjects) {
+      try {
+        const parsed = JSON.parse(storedProjects) as EvaluatedProject[];
+        if (Array.isArray(parsed) && parsed.length > 0) setProjects(parsed);
+      } catch {
+        // ignore invalid stored projects
+      }
+    }
   }, []);
+
+  // Persist projects to localStorage whenever they change
+  useEffect(() => {
+    if (projects.length > 0) {
+      localStorage.setItem(PROJECTS_STORAGE, JSON.stringify(projects));
+    } else {
+      localStorage.removeItem(PROJECTS_STORAGE);
+    }
+  }, [projects]);
 
   const saveApiKey = useCallback(() => {
     const key = apiKey.trim();
@@ -80,10 +117,15 @@ export function Dashboard() {
   const handleFileUpload = useCallback(
     async (file: File) => {
       if (!file.name.endsWith(".csv")) {
-        toast({
-          title: "Invalid file",
-          description: "Please upload a CSV file.",
-          variant: "destructive",
+        setCsvError({
+          title: "Wrong file type",
+          validation: {
+            valid: false,
+            missingHeaders: [],
+            foundHeaders: [],
+            parseError: `You selected "${file.name}". Please choose a CSV file (.csv). CSV files are plain text tables that can be opened in Excel or Google Sheets.`,
+            rowCount: 0,
+          },
         });
         return;
       }
@@ -101,12 +143,23 @@ export function Dashboard() {
           variant: "success",
         });
       } catch (err) {
-        toast({
-          title: "Upload failed",
-          description:
-            err instanceof Error ? err.message : "Failed to parse CSV",
-          variant: "destructive",
-        });
+        if (err instanceof CSVValidationError) {
+          setCsvError({
+            title: "CSV format issue",
+            validation: err.validation,
+          });
+        } else {
+          setCsvError({
+            title: "Could not read file",
+            validation: {
+              valid: false,
+              missingHeaders: [],
+              foundHeaders: [],
+              parseError: err instanceof Error ? err.message : "Unknown error",
+              rowCount: 0,
+            },
+          });
+        }
       }
     },
     [toast]
@@ -166,7 +219,18 @@ export function Dashboard() {
         );
 
         try {
-          const result = await evaluateProject(storedKey, project);
+          const storedCriteria = localStorage.getItem(CRITERIA_STORAGE);
+          const judgingCriteria: JudgingCriterion[] = storedCriteria
+            ? (() => {
+                try {
+                  const p = JSON.parse(storedCriteria) as JudgingCriterion[];
+                  return Array.isArray(p) && p.length > 0 ? p : [...DEFAULT_CRITERIA];
+                } catch {
+                  return [...DEFAULT_CRITERIA];
+                }
+              })()
+            : [...DEFAULT_CRITERIA];
+          const result = await evaluateProject(storedKey, project, judgingCriteria);
           setProjects((prev) =>
             prev.map((p) =>
               p.id === project.id
@@ -178,9 +242,10 @@ export function Dashboard() {
                 : p
             )
           );
+          const totalPts = judgingCriteria.reduce((s, c) => s + c.points, 0);
           toast({
             title: `Evaluated: ${project["Project Title"]}`,
-            description: `Score: ${result.score}/10`,
+            description: `Score: ${result.score}/${totalPts}`,
             variant: "success",
           });
         } catch (err) {
@@ -230,10 +295,10 @@ export function Dashboard() {
       return;
     }
     const csv = exportToCSV(projects);
-    downloadCSV(csv);
+    downloadCSV(csv, "hackathon-evaluations.csv");
     toast({
       title: "Export complete",
-      description: "Evaluations downloaded as CSV.",
+      description: "CSV downloaded with original fields plus Marks, Reason, Pros & Cons.",
       variant: "success",
     });
   }, [projects, toast]);
@@ -311,24 +376,19 @@ export function Dashboard() {
     }
   };
 
+  const maxScore =
+    criteria.length > 0 ? criteria.reduce((s, c) => s + c.points, 0) : DEFAULT_CRITERIA.reduce((s, c) => s + c.points, 0);
   const getScoreBadge = (score: number) => {
-    if (score >= 8) {
-      return (
-        <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 rounded-md text-sm font-bold bg-chart-2/25 text-chart-2">
-          {score}/10
-        </span>
-      );
-    }
-    if (score >= 6) {
-      return (
-        <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 rounded-md text-sm font-bold bg-chart-3/25 text-chart-3">
-          {score}/10
-        </span>
-      );
-    }
+    const pct = maxScore > 0 ? score / maxScore : 0;
+    const isHigh = pct >= 0.8;
+    const isMid = pct >= 0.6 && !isHigh;
     return (
-      <span className="inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 rounded-md text-sm font-bold bg-chart-5/25 text-chart-5">
-        {score}/10
+      <span
+        className={`inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 rounded-md text-sm font-bold ${
+          isHigh ? "bg-chart-2/25 text-chart-2" : isMid ? "bg-chart-3/25 text-chart-3" : "bg-chart-5/25 text-chart-5"
+        }`}
+      >
+        {score}/{maxScore}
       </span>
     );
   };
@@ -354,35 +414,187 @@ export function Dashboard() {
       </header>
 
       <main className="container px-4 py-8 space-y-8 max-w-7xl mx-auto">
-        {/* API Key Settings Dialog */}
+        {/* Settings Dialog */}
         <Dialog open={showSettings} onOpenChange={setShowSettings}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5" />
-                API Key Setup
+                Settings
               </DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Enter your API key. It will be stored locally in
-                your browser (localStorage) and never sent to our servers.
-              </p>
-              <div className="space-y-2">
-                <Label htmlFor="api-key">API Key</Label>
-                <Input
-                  id="api-key"
-                  type="password"
-                  placeholder="Enter your API key"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && saveApiKey()}
-                  className="h-11"
-                />
+            <div className="space-y-8">
+              {/* API Key */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-sm text-foreground">API Key</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Enter your API key. It will be stored locally in your browser
+                  (localStorage) and never sent to our servers.
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="api-key">API Key</Label>
+                  <Input
+                    id="api-key"
+                    type="password"
+                    placeholder="Enter your API key"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && saveApiKey()}
+                    className="h-11"
+                  />
+                </div>
+                <Button onClick={saveApiKey} className="w-full h-11">
+                  Save API Key
+                </Button>
               </div>
-              <Button onClick={saveApiKey} className="w-full h-11">
-                Save & Continue
-              </Button>
+
+              {/* Judging Criteria */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-sm text-foreground">Judging Criteria</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Define the criteria for evaluating projects. Each criterion has a name,
+                  points, and optional description. Total:{" "}
+                  <span className="font-medium text-foreground">
+                    {criteria.reduce((s, c) => s + c.points, 0)} points
+                  </span>
+                </p>
+                <div className="space-y-3">
+                  {criteria.map((c, idx) => (
+                    <div
+                      key={idx}
+                      className="p-3 rounded-lg border border-border bg-muted/30 space-y-2"
+                    >
+                      <div className="flex gap-2 items-center">
+                        <span className="text-sm font-medium text-muted-foreground w-6 shrink-0">
+                          {idx + 1}.
+                        </span>
+                        <Input
+                          placeholder="Criterion name"
+                          value={c.name}
+                          onChange={(e) => {
+                            const next = [...criteria];
+                            next[idx] = { ...next[idx], name: e.target.value };
+                            setCriteria(next);
+                            localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(next));
+                          }}
+                          className="h-9 font-medium flex-1 min-w-0"
+                        />
+                        <Input
+                          type="number"
+                          min={1}
+                          max={100}
+                          placeholder="Pts"
+                          value={c.points}
+                          onChange={(e) => {
+                            const v = parseInt(e.target.value, 10);
+                            if (!isNaN(v) && v >= 1) {
+                              const next = [...criteria];
+                              next[idx] = { ...next[idx], points: v };
+                              setCriteria(next);
+                              localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(next));
+                            }
+                          }}
+                          className="h-9 w-14 shrink-0"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-9 w-9 shrink-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => {
+                            const next = criteria.filter((_, i) => i !== idx);
+                            setCriteria(next);
+                            localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(next.length ? next : []));
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <Input
+                        placeholder="Description (optional)"
+                        value={c.description ?? ""}
+                        onChange={(e) => {
+                          const next = [...criteria];
+                          next[idx] = { ...next[idx], description: e.target.value || undefined };
+                          setCriteria(next);
+                          localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(next));
+                        }}
+                        className="h-8 text-sm ml-8"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 w-full"
+                  onClick={() => {
+                    const next = [...criteria, { name: "New criterion", points: 1, description: "" }];
+                    setCriteria(next);
+                    localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(next));
+                  }}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add criterion
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* CSV Validation Error Dialog */}
+        <Dialog open={!!csvError} onOpenChange={(open) => !open && setCsvError(null)}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <XCircle className="h-5 w-5 shrink-0" />
+                {csvError?.title}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 text-base leading-relaxed">
+              {csvError?.validation.parseError && (
+                <p className="text-foreground">
+                  {csvError.validation.parseError}
+                </p>
+              )}
+              {csvError?.validation.missingHeaders &&
+                csvError.validation.missingHeaders.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="font-medium text-foreground">
+                      Your CSV is missing these required columns:
+                    </p>
+                    <ul className="list-inside list-disc space-y-1 rounded-lg bg-muted/50 px-4 py-3 text-sm text-foreground">
+                      {csvError.validation.missingHeaders.map((h) => (
+                        <li key={h} className="leading-7">
+                          {h}
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-muted-foreground">
+                      Column names must match exactly (including punctuation and
+                      capitalization). Use{" "}
+                      <code className="rounded bg-muted px-1.5 py-0.5 text-sm">
+                        sample-submissions.csv
+                      </code>{" "}
+                      as a reference.
+                    </p>
+                  </div>
+                )}
+              {csvError?.validation.foundHeaders &&
+                csvError.validation.foundHeaders.length > 0 &&
+                csvError.validation.missingHeaders?.length > 0 && (
+                  <details className="rounded-lg border border-border p-3">
+                    <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
+                      Columns found in your file ({csvError.validation.foundHeaders.length})
+                    </summary>
+                    <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto text-sm text-muted-foreground">
+                      {csvError.validation.foundHeaders.map((h) => (
+                        <li key={h} className="truncate">
+                          {h || "(empty)"}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
             </div>
           </DialogContent>
         </Dialog>
@@ -401,8 +613,7 @@ export function Dashboard() {
               />
             </CardTitle>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-2xl mx-auto text-center">
-              Upload a CSV with the required columns: Timestamp, Email, Phone Number, Project
-              Title, What real-world problem are you solving?, Who is this problem for?, How does your solution use AI?, What AI Tools / Platforms have you used, How does your solution help the user?, Demo Link, Detailed Explanation, Biggest Challenge.
+              Upload a CSV with the required columns: Timestamp, Email, Phone Number, Project Title, What real-world problem are you solving?, Who is this problem for? (Profession / domain / user type), How does your solution use AI?, What AI Tools / Platforms have you used, How does your solution help the user? (example-time saved…), Please share GOOGLE DRIVE link…, Explain your solution in detail…, What was the biggest challenge… (Score and Reason is optional).
             </p>
           </CardHeader>
           <CardContent>
@@ -546,6 +757,9 @@ export function Dashboard() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
+                        <th className="text-left p-4 font-semibold text-foreground w-14 shrink-0">
+                          S.No
+                        </th>
                         <th
                           className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
                           onClick={() => toggleSort("title")}
@@ -584,6 +798,9 @@ export function Dashboard() {
                           }`}
                           onClick={() => setSelectedProject(project)}
                         >
+                          <td className="p-4 text-muted-foreground font-medium w-14">
+                            {idx + 1}
+                          </td>
                           <td className="p-4 font-medium text-foreground">
                             {project["Project Title"] || "Untitled"}
                           </td>
@@ -677,7 +894,7 @@ export function Dashboard() {
                     </div>
                     <div>
                       <span className="font-medium text-muted-foreground block mb-1">Target audience</span>
-                      <p className="text-foreground">{selectedProject["Who is this problem for?"] || "—"}</p>
+                      <p className="text-foreground">{selectedProject["Who is this problem for? (Profession / domain / user type)"] || "—"}</p>
                     </div>
                     <div>
                       <span className="font-medium text-muted-foreground block mb-1">AI usage</span>
@@ -689,26 +906,30 @@ export function Dashboard() {
                     </div>
                     <div>
                       <span className="font-medium text-muted-foreground block mb-1">User benefit</span>
-                      <p className="text-foreground">{selectedProject["How does your solution help the user?"] || "—"}</p>
+                      <p className="text-foreground">{selectedProject["How does your solution help the user? (example-time saved, cost reduced, effort reduced, revenue increased)"] || "—"}</p>
                     </div>
                     <div>
-                      <span className="font-medium text-slate-600 dark:text-slate-400 block mb-1">Demo</span>
-                      <a
-                        href={selectedProject["Demo Link"]}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary underline hover:no-underline font-medium"
-                      >
-                        {selectedProject["Demo Link"] || "—"}
-                      </a>
+                      <span className="font-medium text-slate-600 dark:text-slate-400 block mb-1">Demo (Google Drive)</span>
+                      {selectedProject["Please share GOOGLE DRIVE link having your project demo video, files and images"] ? (
+                        <a
+                          href={selectedProject["Please share GOOGLE DRIVE link having your project demo video, files and images"]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline hover:no-underline font-medium"
+                        >
+                          {selectedProject["Please share GOOGLE DRIVE link having your project demo video, files and images"]}
+                        </a>
+                      ) : (
+                        <p className="text-foreground">—</p>
+                      )}
                     </div>
                     <div>
                       <span className="font-medium text-muted-foreground block mb-1">Detailed explanation</span>
-                      <p className="text-foreground">{selectedProject["Detailed Explanation"] || "—"}</p>
+                      <p className="text-foreground">{selectedProject["Explain your solution in detail (For ex. what you did, why is this useful)"] || "—"}</p>
                     </div>
                     <div>
                       <span className="font-medium text-muted-foreground block mb-1">Biggest challenge</span>
-                      <p className="text-foreground">{selectedProject["Biggest Challenge"] || "—"}</p>
+                      <p className="text-foreground">{selectedProject["What was the biggest challenge you faced during this hackathon?"] || "—"}</p>
                     </div>
                   </div>
                 </div>
