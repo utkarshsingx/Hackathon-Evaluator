@@ -674,13 +674,13 @@ export function Dashboard() {
             </CardTitle>
             <div className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-2xl mx-auto text-center space-y-3">
               <p>
-                Use a CSV with submission data. Required columns: Timestamp, Email (or Email Address), Phone Number (or Number), Project Title, problem statement, target audience, AI usage, tools, user benefit, demo link, detailed explanation, and biggest challenge.
+                Use a CSV with submission data.
               </p>
-              <details className="text-left rounded-lg border border-border bg-muted/30 p-3">
-                <summary className="cursor-pointer font-medium text-foreground hover:text-primary transition-colors">
+              <details className="column-list-details rounded-lg border border-border bg-muted/30 p-3 transition-colors duration-200">
+                <summary className="flex items-center justify-center cursor-pointer font-medium text-foreground hover:text-primary transition-colors duration-200 select-none list-none [&::-webkit-details-marker]:hidden">
                   View full column list
                 </summary>
-                <ul className="mt-2 space-y-1 text-xs">
+                <ul className="column-list-content mt-2 space-y-1 text-xs text-center list-none">
                   <li>• Timestamp, Email, Phone Number, Project Title</li>
                   <li>• What real-world problem are you solving?</li>
                   <li>• Who is this problem for? (Profession / domain / user type)</li>
@@ -693,9 +693,6 @@ export function Dashboard() {
                   <li className="text-muted-foreground/80">Optional: Score and Reason</li>
                 </ul>
               </details>
-              <p className="text-xs">
-                Use <code className="rounded bg-muted px-1.5 py-0.5">sample-submissions.csv</code> as a template.
-              </p>
             </div>
           </CardHeader>
           <CardContent className="px-4 sm:px-6">

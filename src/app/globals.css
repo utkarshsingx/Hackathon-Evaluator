@@ -135,3 +135,18 @@
     transform: scale(1) translateY(0);
   }
 }
+
+@keyframes columnListSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.column-list-details[open] .column-list-content {
+  animation: columnListSlide 0.3s ease-out forwards;
+}
