@@ -25,8 +25,25 @@ import {
   Loader2,
   AlertTriangle,
   Sparkles,
+  ChevronUp,
+  ChevronDown,
+  Download,
+  FileText,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import ShinyText from "@/components/ShinyText";
+import {
+  exportToCSV,
+  downloadCSV,
+  downloadExcel,
+  downloadPDF,
+} from "@/lib/csv";
+import { useToast } from "@/components/ui/use-toast";
 import type { EvaluatedProject, JudgingCriterion } from "@/lib/types";
 
 interface ShareData {
@@ -45,6 +62,11 @@ export default function SharePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedProject, setSelectedProject] = useState<EvaluatedProject | null>(null);
+  const [sortConfig, setSortConfig] = useState<{
+    key: "title" | "score" | "status" | "rank";
+    direction: "asc" | "desc";
+  } | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!slug) return;
@@ -128,6 +150,73 @@ export default function SharePage() {
     }
   }
 
+  const sortedProjects = [...data.projects].sort((a, b) => {
+    if (!sortConfig) return 0;
+    const { key, direction } = sortConfig;
+    let cmp = 0;
+    if (key === "title") {
+      cmp = (a["Project Title"] || "").localeCompare(b["Project Title"] || "");
+    } else if (key === "score") {
+      if (a.cannotEvaluate && b.cannotEvaluate) cmp = 0;
+      else if (a.cannotEvaluate) cmp = 1;
+      else if (b.cannotEvaluate) cmp = -1;
+      else {
+        const sa = a.evaluation?.score ?? -1;
+        const sb = b.evaluation?.score ?? -1;
+        cmp = sa - sb;
+      }
+    } else if (key === "rank") {
+      if (a.cannotEvaluate && b.cannotEvaluate) cmp = 0;
+      else if (a.cannotEvaluate) cmp = 1;
+      else if (b.cannotEvaluate) cmp = -1;
+      else {
+        const ra = rankMap.get(a.id) ?? 999;
+        const rb = rankMap.get(b.id) ?? 999;
+        cmp = ra - rb;
+      }
+    } else {
+      cmp = a.status.localeCompare(b.status);
+    }
+    return direction === "asc" ? cmp : -cmp;
+  });
+
+  const toggleSort = (key: "title" | "score" | "status" | "rank") => {
+    setSortConfig((prev) => {
+      if (prev?.key === key) {
+        return { key, direction: prev.direction === "asc" ? "desc" : "asc" };
+      }
+      return { key, direction: key === "score" ? "desc" : "asc" };
+    });
+  };
+
+  const SortIcon = ({ column }: { column: "title" | "score" | "status" | "rank" }) => {
+    if (sortConfig?.key !== column) return null;
+    return sortConfig.direction === "asc" ? (
+      <ChevronUp className="h-4 w-4 inline ml-1" />
+    ) : (
+      <ChevronDown className="h-4 w-4 inline ml-1" />
+    );
+  };
+
+  const handleExport = (format: "csv" | "excel" | "pdf") => {
+    if (data.projects.length === 0) return;
+    const baseName = data.name?.replace(/\.csv$/i, "") ?? "hackathon-evaluations";
+    const exportName = `${baseName} - evaluation`;
+    if (format === "csv") {
+      const csv = exportToCSV(data.projects, maxScore);
+      downloadCSV(csv, `${exportName}.csv`);
+    } else if (format === "excel") {
+      downloadExcel(data.projects, `${exportName}.xlsx`, maxScore);
+    } else {
+      downloadPDF(data.projects, `${exportName}.pdf`, maxScore);
+    }
+    toast({
+      title: "Export complete",
+      description: `${format.toUpperCase()} downloaded.`,
+      variant: "success",
+    });
+  };
+
   const getStatusBadge = (status: EvaluatedProject["status"]) => {
     switch (status) {
       case "processed":
@@ -160,16 +249,39 @@ export default function SharePage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-xl">
-        <div className="flex h-12 sm:h-16 items-center justify-between px-4 max-w-7xl mx-auto">
+        <div className="flex h-12 sm:h-16 items-center justify-between px-4 max-w-7xl mx-auto gap-4">
           <Button asChild variant="ghost" size="sm" className="gap-2">
             <Link href="/">
               <ArrowLeft className="h-4 w-4" />
               Back
             </Link>
           </Button>
-          <span className="text-sm text-muted-foreground">
+          <span className="text-sm text-muted-foreground flex-1">
             Shared evaluation
           </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Download className="h-4 w-4" />
+                Export
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleExport("csv")}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("excel")}>
+                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                Excel
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("pdf")}>
+                <FileText className="h-4 w-4 mr-2" />
+                PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </header>
 
@@ -204,22 +316,46 @@ export default function SharePage() {
                     <th className="text-left p-4 font-semibold text-foreground w-14">
                       S.No
                     </th>
-                    <th className="text-left p-4 font-semibold text-foreground">
-                      Project Title
+                    <th
+                      className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
+                      onClick={() => toggleSort("title")}
+                    >
+                      <span className="flex items-center gap-1">
+                        Project Title
+                        <SortIcon column="title" />
+                      </span>
                     </th>
-                    <th className="text-left p-4 font-semibold text-foreground">
-                      Total Score
+                    <th
+                      className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
+                      onClick={() => toggleSort("score")}
+                    >
+                      <span className="flex items-center gap-1">
+                        Total Score
+                        <SortIcon column="score" />
+                      </span>
                     </th>
-                    <th className="text-left p-4 font-semibold text-foreground">
-                      Rank
+                    <th
+                      className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
+                      onClick={() => toggleSort("rank")}
+                    >
+                      <span className="flex items-center gap-1">
+                        Rank
+                        <SortIcon column="rank" />
+                      </span>
                     </th>
-                    <th className="text-left p-4 font-semibold text-foreground">
-                      Status
+                    <th
+                      className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
+                      onClick={() => toggleSort("status")}
+                    >
+                      <span className="flex items-center gap-1">
+                        Status
+                        <SortIcon column="status" />
+                      </span>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {data.projects.map((project, idx) => (
+                  {sortedProjects.map((project, idx) => (
                     <tr
                       key={project.id}
                       onClick={() => setSelectedProject(project)}

@@ -44,10 +44,14 @@ export async function POST(
       );
     }
 
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL ??
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-    const url = `${baseUrl}/share/${slug}`;
+    // Prefer canonical URL so share links use production, not preview deployments
+    const canonical = process.env.NEXT_PUBLIC_APP_URL?.trim();
+    const baseUrl = canonical ?? (() => {
+      const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+      const proto = request.headers.get("x-forwarded-proto") ?? (host?.includes("localhost") ? "http" : "https");
+      return host ? `${proto}://${host}` : (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+    })();
+    const url = `${baseUrl.replace(/\/$/, "")}/share/${slug}`;
 
     return NextResponse.json({ url, slug });
   } catch (err) {

@@ -1,10 +1,24 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 
+function getOrigin(request: Request): string {
+  const url = new URL(request.url);
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? url.host;
+  const proto = request.headers.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/";
+  let next = searchParams.get("next") ?? "/";
+  const origin = getOrigin(request);
+
+  // Prevent open redirect: only allow relative paths
+  if (next.startsWith("//") || next.startsWith("http://") || next.startsWith("https://")) {
+    next = "/";
+  }
+  if (!next.startsWith("/")) next = `/${next}`;
 
   if (code) {
     const supabase = await createClient();
