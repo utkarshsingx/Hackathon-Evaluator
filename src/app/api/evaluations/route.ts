@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { EvaluatedProject, JudgingCriterion } from "@/lib/types";
 import { DEFAULT_CRITERIA } from "@/lib/types";
+import { isAdmin } from "@/lib/admin";
 
 export async function GET() {
   try {
@@ -14,10 +15,17 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { data: evaluations, error } = await supabase
+    const admin = await isAdmin(user.id);
+    let query = supabase
       .from("evaluations")
       .select("id, user_id, user_email, name, criteria_json, share_slug, created_at, updated_at, last_evaluated_at")
       .order("created_at", { ascending: false });
+
+    if (!admin) {
+      query = query.eq("user_id", user.id);
+    }
+
+    const { data: evaluations, error } = await query;
 
     if (error) {
       console.error("[Evaluations GET]", error);

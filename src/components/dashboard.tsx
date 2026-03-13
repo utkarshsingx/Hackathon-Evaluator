@@ -95,6 +95,8 @@ export function Dashboard() {
   const [usageLog, setUsageLog] = useState<UsageLogEntry[]>([]);
   const [uploadedFileName, setUploadedFileName] = useState<string>("");
   const [loadingEvaluations, setLoadingEvaluations] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const pauseRequestedRef = useRef(false);
   const { toast } = useToast();
 
@@ -118,6 +120,17 @@ export function Dashboard() {
       localStorage.setItem(USAGE_LOG_STORAGE, JSON.stringify(usageLog));
     }
   }, [usageLog]);
+
+  // Fetch admin status on mount
+  useEffect(() => {
+    fetch("/api/admin")
+      .then((res) => (res.ok ? res.json() : { isAdmin: false, userId: null }))
+      .then((data: { isAdmin?: boolean; userId?: string | null }) => {
+        setIsAdmin(data.isAdmin ?? false);
+        setCurrentUserId(data.userId ?? null);
+      })
+      .catch(() => {});
+  }, []);
 
   // Fetch evaluations list on mount
   useEffect(() => {
@@ -186,6 +199,29 @@ export function Dashboard() {
       .then((data: EvaluationSummary[]) => setEvaluations(Array.isArray(data) ? data : []))
       .catch(() => {});
   }, []);
+
+  const handleDeleteEvaluation = useCallback(
+    async (id: string) => {
+      if (!window.confirm("Delete this evaluation? This cannot be undone.")) return;
+      try {
+        const res = await fetch(`/api/evaluations/${id}`, { method: "DELETE" });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error ?? "Failed to delete");
+        }
+        if (evaluationId === id) setEvaluationId(null);
+        refreshEvaluations();
+        toast({ title: "Evaluation deleted", variant: "success" });
+      } catch (err) {
+        toast({
+          title: "Delete failed",
+          description: err instanceof Error ? err.message : "Unknown error",
+          variant: "destructive",
+        });
+      }
+    },
+    [evaluationId, refreshEvaluations, toast]
+  );
 
   const handleFileUpload = useCallback(
     async (file: File) => {
@@ -1018,6 +1054,9 @@ export function Dashboard() {
             activeId={evaluationId}
             onSelect={setEvaluationId}
             onCreateNew={() => setEvaluationId(null)}
+            onDelete={handleDeleteEvaluation}
+            isAdmin={isAdmin}
+            currentUserId={currentUserId}
           />
         )}
 

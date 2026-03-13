@@ -19,8 +19,9 @@ Step-by-step setup for deploying Hackathon Evaluator to **Vercel** with **Supaba
    - `supabase/migrations/20240313000000_initial_schema.sql`
    - `supabase/migrations/20240313000001_judging_criteria_default.sql`
    - `supabase/migrations/20240313000002_last_evaluated_at.sql`
+   - `supabase/migrations/20240313000003_admin_users.sql`
 
-Or paste all three files’ contents into one query and run.
+Or paste all four files’ contents into one query and run.
 
 ### 1.3 Enable Google Auth
 
@@ -40,6 +41,7 @@ Or paste all three files’ contents into one query and run.
 2. Copy:
    - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
    - **anon public** key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - **service_role** key → `SUPABASE_SERVICE_ROLE_KEY` (required for admin delete; keep secret)
 
 ---
 
@@ -64,6 +66,7 @@ Or paste all three files’ contents into one query and run.
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://xxx.supabase.co` | From Supabase → Settings → API |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `eyJ...` | From Supabase → Settings → API |
 | `NEXT_PUBLIC_APP_URL` | `https://your-app.vercel.app` | **Required for share links.** Set to your production URL so share links use it instead of preview deployment URLs. |
+| `SUPABASE_SERVICE_ROLE_KEY` | `eyJ...` | **Required for admin delete.** From Supabase → Settings → API → service_role. Never expose to client. |
 
 **Optional (Drive folders):**
 
@@ -99,7 +102,7 @@ If Site URL or Redirect URLs point to localhost, sign-in and share links will re
 ## 3. Checklist
 
 - [ ] Supabase project created
-- [ ] All 3 migrations run in SQL Editor
+- [ ] All 4 migrations run in SQL Editor
 - [ ] Google Auth enabled and configured
 - [ ] `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in Vercel
 - [ ] `GEMINI_API_KEY` or `OPENAI_API_KEY` in Vercel
@@ -109,7 +112,23 @@ If Site URL or Redirect URLs point to localhost, sign-in and share links will re
 
 ---
 
-## 4. Drive folder access (optional)
+## 4. Admin role (optional)
+
+To grant admin access (see all evaluations, delete any):
+
+1. Have the admin user sign in at least once so they exist in `auth.users`
+2. In Supabase → **SQL Editor**, run:
+
+```sql
+INSERT INTO admin_users (user_id)
+SELECT id FROM auth.users WHERE email = 'admin@example.com' LIMIT 1;
+```
+
+Replace `admin@example.com` with the actual admin email.
+
+---
+
+## 5. Drive folder access (optional)
 
 If you want to evaluate Drive folders:
 
@@ -121,7 +140,7 @@ If you want to evaluate Drive folders:
 
 ---
 
-## 5. Troubleshooting
+## 6. Troubleshooting
 
 | Issue | Fix |
 |-------|-----|
