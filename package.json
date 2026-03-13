@@ -18,6 +18,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "jspdf": "^4.2.0",
+    "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.460.0",
     "motion": "^12.36.0",
     "next": "14.2.18",
@@ -28,7 +29,8 @@
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.5.4",
     "three": "^0.183.2",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "xlsx-js-style": "^1.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

@@ -1,8 +1,9 @@
 import Papa from "papaparse";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 import { jsPDF } from "jspdf";
+import { autoTable } from "jspdf-autotable";
 import type { HackathonProject, EvaluatedProject } from "./types";
-import { REQUIRED_CSV_HEADERS } from "./types";
+import { REQUIRED_CSV_HEADERS, DEFAULT_CRITERIA } from "./types";
 
 // Alternate headers that map to our canonical names (for flexible CSV support)
 const HEADER_ALIASES: Record<string, string> = {
@@ -29,11 +30,8 @@ function resolveHeader(actualHeaders: string[], canonical: string): string | nul
   return normalized.get(canonical) ?? null;
 }
 
-// Original CSV column order (matches submission form)
-const ORIGINAL_CSV_COLUMNS = [
-  ...REQUIRED_CSV_HEADERS,
-  "Score and Reason",
-] as const;
+// Original CSV column order (matches submission form, excludes optional Score and Reason)
+const ORIGINAL_CSV_COLUMNS = [...REQUIRED_CSV_HEADERS] as const;
 
 export interface CSVValidationResult {
   valid: boolean;
@@ -162,8 +160,17 @@ export function parseCSV(file: File): Promise<HackathonProject[]> {
   });
 }
 
-export function exportToCSV(projects: EvaluatedProject[]): string {
-  const rows = projects.map((p) => {
+function sortByMarksDesc(projects: EvaluatedProject[]): EvaluatedProject[] {
+  return [...projects].sort((a, b) => {
+    const scoreA = a.cannotEvaluate ? -1 : (a.evaluation?.score ?? -1);
+    const scoreB = b.cannotEvaluate ? -1 : (b.evaluation?.score ?? -1);
+    return scoreB - scoreA;
+  });
+}
+
+export function exportToCSV(projects: EvaluatedProject[], maxScore = 100): string {
+  const sorted = sortByMarksDesc(projects);
+  const rows = sorted.map((p) => {
     const row: Record<string, string | number> = {};
 
     // Original CSV fields (preserve order)
@@ -172,17 +179,18 @@ export function exportToCSV(projects: EvaluatedProject[]): string {
       row[col] = val != null ? String(val) : "";
     }
 
-    // Appended evaluation fields (use newlines for line wrap in Excel)
+    // Appended evaluation fields (pros/cons as bullet points, marks as x/100)
     if (p.cannotEvaluate) {
       row["Marks"] = "Cannot be evaluated";
       row["Reason"] = "Cannot be evaluated as there was no access to Drive.";
       row["Pros"] = "";
       row["Cons"] = "";
     } else if (p.evaluation) {
-      row["Marks"] = p.evaluation.score;
+      const s = p.evaluation.score;
+      row["Marks"] = typeof s === "number" ? Math.round(s) + "/" + maxScore : s;
       row["Reason"] = p.evaluation.reason_why;
-      row["Pros"] = Array.isArray(p.evaluation.pros) ? p.evaluation.pros.join("\n") : "";
-      row["Cons"] = Array.isArray(p.evaluation.cons) ? p.evaluation.cons.join("\n") : "";
+      row["Pros"] = formatProsConsAsBullets(p.evaluation.pros ?? []);
+      row["Cons"] = formatProsConsAsBullets(p.evaluation.cons ?? []);
     } else {
       row["Marks"] = "";
       row["Reason"] = "";
@@ -206,7 +214,7 @@ export function downloadCSV(csv: string, filename = "hackathon-evaluations.csv")
   URL.revokeObjectURL(url);
 }
 
-function getExportRows(projects: EvaluatedProject[]): Record<string, string | number>[] {
+function getExportRows(projects: EvaluatedProject[], maxScore = 100): Record<string, string | number>[] {
   const rows = projects.map((p) => {
     const row: Record<string, string | number> = {};
     for (const col of ORIGINAL_CSV_COLUMNS) {
@@ -219,10 +227,11 @@ function getExportRows(projects: EvaluatedProject[]): Record<string, string | nu
       row["Pros"] = "";
       row["Cons"] = "";
     } else if (p.evaluation) {
-      row["Marks"] = p.evaluation.score;
+      const s = p.evaluation.score;
+      row["Marks"] = typeof s === "number" ? Math.round(s) + "/" + maxScore : s;
       row["Reason"] = p.evaluation.reason_why;
-      row["Pros"] = Array.isArray(p.evaluation.pros) ? p.evaluation.pros.join("\n") : "";
-      row["Cons"] = Array.isArray(p.evaluation.cons) ? p.evaluation.cons.join("\n") : "";
+      row["Pros"] = formatProsConsAsBullets(p.evaluation.pros ?? []);
+      row["Cons"] = formatProsConsAsBullets(p.evaluation.cons ?? []);
     } else {
       row["Marks"] = "";
       row["Reason"] = "";
@@ -234,11 +243,89 @@ function getExportRows(projects: EvaluatedProject[]): Record<string, string | nu
   return rows;
 }
 
-export function downloadExcel(projects: EvaluatedProject[], filename = "hackathon-evaluations.xlsx") {
-  const rows = getExportRows(projects);
+/** PDF-only columns: S.No., Project Title, Email, Marks, Reason, Pros, Cons (no form fields) */
+const PDF_COLUMNS = ["S.No.", "Project Title", "Email", "Marks", "Reason", "Pros", "Cons"] as const;
+
+function formatProsConsAsBullets(items: string[]): string {
+  if (!Array.isArray(items) || items.length === 0) return "";
+  return items.map((item) => `• ${String(item).trim()}`).filter(Boolean).join("\n\n");
+}
+
+function getPDFExportRows(
+  projects: EvaluatedProject[],
+  maxScore: number
+): Record<string, string | number>[] {
+  return projects.map((p, idx) => {
+    let marks: string = "";
+    let reason = "";
+    let pros = "";
+    let cons = "";
+    if (p.cannotEvaluate) {
+      marks = "Cannot be evaluated";
+      reason = "Cannot be evaluated as there was no access to Drive.";
+    } else if (p.evaluation) {
+      const ev = p.evaluation;
+      const score = ev.score;
+      const s = typeof score === "number" ? score : score != null ? Number(score) : NaN;
+      marks = !isNaN(s)
+        ? String(Math.round(s)) + "/" + String(maxScore)
+        : "";
+      reason = ev.reason_why ?? "";
+      pros = formatProsConsAsBullets(ev.pros ?? []);
+      cons = formatProsConsAsBullets(ev.cons ?? []);
+    }
+    return {
+      "S.No.": idx + 1,
+      "Project Title": p["Project Title"] ?? "",
+      Email: p.Email ?? "",
+      Marks: marks,
+      Reason: reason,
+      Pros: pros,
+      Cons: cons,
+    };
+  });
+}
+
+const EXCEL_COL_WIDTHS: Record<string, number> = {
+  Timestamp: 22,
+  Email: 28,
+  "Phone Number": 18,
+  "Project Title": 24,
+  "What real-world problem are you solving?": 38,
+  "Who is this problem for? (Profession / domain / user type)": 38,
+  "How does your solution use AI?": 22,
+  "What AI Tools / Platforms have you used": 38,
+  "How does your solution help the user? (example-time saved, cost reduced, effort reduced, revenue increased)": 42,
+  "Please share GOOGLE DRIVE link having your project demo video, files and images": 22,
+  "Explain your solution in detail (For ex. what you did, why is this useful)": 45,
+  "What was the biggest challenge you faced during this hackathon?": 22,
+  Marks: 14,
+  Reason: 28,
+  Pros: 28,
+  Cons: 28,
+};
+
+export function downloadExcel(
+  projects: EvaluatedProject[],
+  filename = "hackathon-evaluations.xlsx",
+  maxScore?: number
+) {
+  const total = maxScore ?? DEFAULT_CRITERIA.reduce((s, c) => s + c.points, 0);
+  const sorted = sortByMarksDesc(projects);
+  const rows = getExportRows(sorted, total);
   const ws = XLSX.utils.json_to_sheet(rows);
-  const colWidths = Object.keys(rows[0] || {}).map(() => ({ wch: 20 }));
-  ws["!cols"] = colWidths;
+  const headers = Object.keys(rows[0] || {});
+  ws["!cols"] = headers.map((h) => ({ wch: EXCEL_COL_WIDTHS[h] ?? 14 }));
+  const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const addr = XLSX.utils.encode_cell({ r: R, c: C });
+      const cell = ws[addr];
+      if (cell) {
+        cell.s = { ...(cell.s as object || {}), alignment: { wrapText: true } };
+      }
+    }
+  }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Evaluations");
   XLSX.writeFile(wb, filename);
@@ -262,106 +349,60 @@ function sanitizeForPdf(text: string): string {
   s = s.replace(/  +/g, " ").trim();
   return s;
 }
-const PDF_PAGE_W = 297;
-const PDF_PAGE_H = 210;
 const PDF_MARGIN = 6;
-const PDF_LINE_HEIGHT = 3.6;
 const PDF_CELL_PADDING = 2.5;
-const PDF_MAX_LINES_PER_CELL = 12;
+const PDF_PAGE_W = 297; // landscape A4 width in mm
 
-export function downloadPDF(projects: EvaluatedProject[], filename = "hackathon-evaluations.pdf") {
-  const rows = getExportRows(projects);
+export function downloadPDF(
+  projects: EvaluatedProject[],
+  filename = "hackathon-evaluations.pdf",
+  maxScore?: number
+) {
+  const total = maxScore ?? DEFAULT_CRITERIA.reduce((s, c) => s + c.points, 0);
+  const sorted = sortByMarksDesc(projects);
+  const rows = getPDFExportRows(sorted, total);
   if (rows.length === 0) return;
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-  doc.setLineHeightFactor(1.25);
-  const headers = Object.keys(rows[0]);
-  const colCount = headers.length;
-  const colW = (PDF_PAGE_W - PDF_MARGIN * 2) / colCount;
+  const headers = [...PDF_COLUMNS];
+  const body = rows.map((r) =>
+    headers.map((h) => {
+      const val = r[h];
+      const raw = val == null || val === "" ? "" : String(val);
+      return h === "S.No." || h === "Marks" ? raw : sanitizeForPdf(raw);
+    })
+  );
 
-  let y = PDF_MARGIN;
-
-  const addHeader = () => {
-    const headerLines = headers.map((h) =>
-      doc.splitTextToSize(sanitizeForPdf(String(h || "")), colW - PDF_CELL_PADDING * 2)
-    );
-    const headerH =
-      Math.max(...headerLines.map((l) => l.length), 1) * PDF_LINE_HEIGHT + PDF_CELL_PADDING * 2;
-
-    headers.forEach((h, i) => {
-      const x = PDF_MARGIN + i * colW;
-      doc.setFillColor(55, 65, 81);
-      doc.rect(x, y, colW, headerH, "F");
-      doc.setDrawColor(75, 85, 99);
-      doc.setLineWidth(0.2);
-      doc.rect(x, y, colW, headerH, "S");
-    });
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(PDF_HEADER_FONT);
-    doc.setTextColor(255, 255, 255);
-    headers.forEach((h, i) => {
-      const x = PDF_MARGIN + i * colW + PDF_CELL_PADDING;
-      const lines = headerLines[i].slice(0, PDF_MAX_LINES_PER_CELL);
-      doc.text(lines, x, y + PDF_CELL_PADDING + PDF_LINE_HEIGHT);
-    });
-    doc.setTextColor(0, 0, 0);
-    doc.setLineWidth(0.1);
-    y += headerH;
+  const tableW = PDF_PAGE_W - PDF_MARGIN * 2;
+  const narrowW = 14; // S.No. and Marks - less width
+  const midW = 38;    // Project Title, Email
+  const reasonProsConsW = (tableW - narrowW * 2 - midW * 2) / 3; // Reason, Pros, Cons - equal width
+  const columnStyles: Record<number, { cellWidth: number }> = {
+    0: { cellWidth: narrowW },        // S.No.
+    1: { cellWidth: midW },           // Project Title
+    2: { cellWidth: midW },           // Email
+    3: { cellWidth: narrowW },         // Marks
+    4: { cellWidth: reasonProsConsW }, // Reason
+    5: { cellWidth: reasonProsConsW }, // Pros
+    6: { cellWidth: reasonProsConsW }, // Cons
   };
 
-  const addRow = (r: Record<string, string | number>, rowIndex: number) => {
-    const cellLines = headers.map((h) => {
-      const text = sanitizeForPdf(String(r[h] ?? ""));
-      return doc.splitTextToSize(text, colW - PDF_CELL_PADDING * 2);
-    });
-    const rowH =
-      Math.max(
-        ...cellLines.map((l) => l.slice(0, PDF_MAX_LINES_PER_CELL).length),
-        1
-      ) *
-        PDF_LINE_HEIGHT +
-      PDF_CELL_PADDING * 2;
-
-    const isAltRow = rowIndex % 2 === 1;
-    if (isAltRow) {
-      headers.forEach((_, i) => {
-        const x = PDF_MARGIN + i * colW;
-        doc.setFillColor(249, 250, 251);
-        doc.rect(x, y, colW, rowH, "F");
-      });
-    }
-    headers.forEach((_, i) => {
-      const x = PDF_MARGIN + i * colW;
-      doc.setDrawColor(209, 213, 219);
-      doc.setLineWidth(0.15);
-      doc.rect(x, y, colW, rowH, "S");
-    });
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(PDF_BODY_FONT);
-    doc.setTextColor(31, 41, 55);
-    headers.forEach((h, i) => {
-      const x = PDF_MARGIN + i * colW + PDF_CELL_PADDING;
-      const lines = cellLines[i].slice(0, PDF_MAX_LINES_PER_CELL);
-      doc.text(lines, x, y + PDF_CELL_PADDING + PDF_LINE_HEIGHT);
-    });
-    doc.setTextColor(0, 0, 0);
-    doc.setLineWidth(0.1);
-    y += rowH;
-  };
-
-  const checkPageBreak = () => {
-    if (y > PDF_PAGE_H - PDF_MARGIN - 20) {
-      doc.addPage("a4", "landscape");
-      y = PDF_MARGIN;
-      addHeader();
-    }
-  };
-
-  addHeader();
-  for (let i = 0; i < rows.length; i++) {
-    checkPageBreak();
-    addRow(rows[i], i);
-  }
+  autoTable(doc, {
+    head: [headers],
+    body,
+    theme: "grid",
+    styles: { fontSize: PDF_BODY_FONT, cellPadding: PDF_CELL_PADDING },
+    columnStyles,
+    headStyles: {
+      fillColor: [55, 65, 81],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      fontSize: PDF_HEADER_FONT,
+    },
+    alternateRowStyles: { fillColor: [249, 250, 251] },
+    margin: { left: PDF_MARGIN, right: PDF_MARGIN },
+    tableWidth: tableW,
+  });
 
   doc.save(filename);
 }

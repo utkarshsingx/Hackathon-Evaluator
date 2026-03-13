@@ -441,13 +441,14 @@ export function Dashboard() {
       }
       const baseName = uploadedFileName || "hackathon-evaluations";
       const exportName = `${baseName} - evaluation`;
+      const total = criteria.length > 0 ? criteria.reduce((s, c) => s + c.points, 0) : 100;
       if (format === "csv") {
-        const csv = exportToCSV(projects);
+        const csv = exportToCSV(projects, total);
         downloadCSV(csv, `${exportName}.csv`);
       } else if (format === "excel") {
-        downloadExcel(projects, `${exportName}.xlsx`);
+        downloadExcel(projects, `${exportName}.xlsx`, total);
       } else {
-        downloadPDF(projects, `${exportName}.pdf`);
+        downloadPDF(projects, `${exportName}.pdf`, total);
       }
       toast({
         title: "Export complete",
@@ -455,7 +456,7 @@ export function Dashboard() {
         variant: "success",
       });
     },
-    [projects, uploadedFileName, toast]
+    [projects, uploadedFileName, criteria, toast]
   );
 
   const handleDownloadUsageLog = useCallback(() => {
