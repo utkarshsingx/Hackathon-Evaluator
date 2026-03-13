@@ -9,8 +9,6 @@ export type AIProvider = "gemini" | "openai";
 const GEMINI_MODEL = "gemini-2.5-flash";
 const OPENAI_MODEL = "gpt-4o-mini";
 
-const DRIVE_DEDUCTION_POINTS = 10;
-
 function buildCriteriaText(criteria: JudgingCriterion[]): string {
   const total = criteria.reduce((sum, c) => sum + c.points, 0);
   const lines = criteria.map(
@@ -22,11 +20,15 @@ function buildCriteriaText(criteria: JudgingCriterion[]): string {
 function buildEvaluationPrompt(criteria: JudgingCriterion[]): string {
   const criteriaBlock = buildCriteriaText(criteria);
   const maxScore = criteria.reduce((sum, c) => sum + c.points, 0);
-  return `You are an expert hackathon judge. Evaluate the following project submission based on the judging criteria.
+  return `You are an expert hackathon judge at a professional, competitive hackathon. Evaluate STRICTLY based on the judging criteria.
+
+SCORING RULES (follow strictly):
+1. USE THE FULL SCORE RANGE (0 to ${"{{maxScore}}"}) - differentiate projects. Avoid clustering scores (e.g. 75-85). Top projects: 80-100. Average: 50-70. Weak: 20-45. Poor: 0-20.
+2. BE HARSH on vague responses - If problem statement, AI usage, or explanation is generic, unclear, or lacks specifics, score LOW on that criterion. "We use AI to help users" without details = low AI Integration. "Solves a problem" without defining it = low Problem Definition.
+3. Reserve high scores (8+/10 equivalent per criterion) only for submissions with concrete details, clear value, and demonstrated execution.
+4. Each criterion must be scored independently - a vague submission gets low scores across multiple criteria.
 
 ${criteriaBlock}
-
-IMPORTANT - Google Drive link: If the project's Google Drive link is broken, not accessible, or returns an error, you MUST deduct ${DRIVE_DEDUCTION_POINTS} points from the score. Include this in your reason_why and cons.
 
 Project Submission:
 - Project Title: {{projectTitle}}
@@ -55,9 +57,7 @@ function buildDriveContentBlock(drive: DriveFetchResult | null): string {
   if (!drive.accessible) {
     return `
 
-Google Drive link status: BROKEN / NOT ACCESSIBLE
-- Error: ${drive.error || "Could not access the link"}
-- You MUST deduct ${DRIVE_DEDUCTION_POINTS} points from the score for the inaccessible Drive link.`;
+Google Drive link status: Content could not be fetched (${drive.error || "Link may be private or broken"}). Evaluate based on other submission details.`;
   }
 
   if (drive.content && drive.isDoc) {
@@ -204,19 +204,5 @@ export async function evaluateProject(
       ? await evaluateWithOpenAI(apiKey, prompt)
       : await evaluateWithGemini(apiKey, prompt);
 
-  const result = parseJsonResponse(text);
-
-  // Apply mark deduction for broken/inaccessible Drive link
-  const hasDriveLink = driveResult && !driveResult.accessible;
-  const driveLinkProvided = project["Please share GOOGLE DRIVE link having your project demo video, files and images"]?.trim();
-  if (hasDriveLink && driveLinkProvided) {
-    const deduction = Math.min(DRIVE_DEDUCTION_POINTS, result.score);
-    result.score = Math.max(0, result.score - deduction);
-    result.reason_why = `${result.reason_why} [${deduction} points deducted for inaccessible/broken Google Drive link.]`;
-    if (!result.cons.some((c) => c.toLowerCase().includes("drive") || c.toLowerCase().includes("link"))) {
-      result.cons.push("Google Drive link is broken or not accessible.");
-    }
-  }
-
-  return result;
+  return parseJsonResponse(text);
 }

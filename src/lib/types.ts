@@ -24,12 +24,56 @@ export interface JudgingCriterion {
   description?: string;
 }
 
-// Default criteria (total 100 marks, can be overridden in Settings)
+// Default criteria (total 100 marks, professional hackathon style - can be overridden in Settings)
 export const DEFAULT_CRITERIA: JudgingCriterion[] = [
-  { name: "Uniqueness", points: 20, description: "How original and innovative is the idea?" },
-  { name: "Problem Solving", points: 30, description: "How well does it address a real-world problem?" },
-  { name: "Approach", points: 20, description: "How sound is the technical approach and AI integration?" },
-  { name: "Resilience", points: 30, description: "How well did the team overcome challenges and demonstrate persistence?" },
+  {
+    name: "Problem Definition & Clarity",
+    points: 12,
+    description:
+      "How well-defined and specific is the problem? Vague or generic problem statements score low. Clear target audience and scope score high.",
+  },
+  {
+    name: "Innovation & Uniqueness",
+    points: 14,
+    description:
+      "How original and differentiated is the solution? Copycat ideas or obvious solutions score low. Novel approaches score high.",
+  },
+  {
+    name: "Technical Execution",
+    points: 18,
+    description:
+      "How well is the solution built? Feasibility, architecture, and implementation quality. Vague technical descriptions score low.",
+  },
+  {
+    name: "AI Integration",
+    points: 18,
+    description:
+      "Depth and meaningful use of AI. Generic 'we use AI' without specifics scores low. Clear AI workflow, models, and impact score high.",
+  },
+  {
+    name: "User Impact & Value",
+    points: 14,
+    description:
+      "Tangible benefit to users. Quantifiable outcomes (time/cost saved) score higher. Vague benefits score low.",
+  },
+  {
+    name: "Completeness & Polish",
+    points: 10,
+    description:
+      "How demo-ready and polished is the submission? Incomplete or rushed work scores low.",
+  },
+  {
+    name: "Presentation & Communication",
+    points: 8,
+    description:
+      "Clarity of explanation, structure, and articulation. Vague or poorly explained submissions score low.",
+  },
+  {
+    name: "Scalability & Viability",
+    points: 6,
+    description:
+      "Real-world viability and potential to scale. Practical deployment considerations.",
+  },
 ];
 
 // AI evaluation result

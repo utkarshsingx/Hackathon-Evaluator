@@ -13,7 +13,7 @@ A modern, responsive React + Next.js dashboard to evaluate hackathon projects fr
 - **API Key Setup** — Use Gemini or OpenAI; store API key in localStorage via Settings
 - **CSV Upload** — Drag-and-drop or click to upload submissions with validated headers
 - **Automated Evaluation** — Process all projects with AI using custom judging criteria
-- **Google Drive Integration** — Supports multiple links (folders for presentation, coding, docs). Fetches content from shared Google Docs; with `GOOGLE_DRIVE_API_KEY`, lists folder contents and fetches all docs (including subfolders). **10 points deducted** if any link is broken or inaccessible
+- **Google Drive Integration** — Supports multiple links (folders for presentation, coding, docs). Fetches content from shared Google Docs; with `GOOGLE_DRIVE_API_KEY`, lists folder contents and fetches all docs (including subfolders)
 - **Dashboard** — Searchable, sortable table with Project Title, Score, and Status
 - **Detail View** — Side-by-side comparison of original submission and AI critique
 - **Export** — Download evaluated results as CSV
@@ -25,11 +25,15 @@ A modern, responsive React + Next.js dashboard to evaluate hackathon projects fr
 - **Smooth Animations** — Fade, slide, and scale transitions on key sections
 - **Glow Effects** — Primary-colored glow on empty state heading
 
-### Judging Criteria (default total: 100)
-- Uniqueness (20 pts)
-- Problem Solving (30 pts)
-- Approach (20 pts)
-- Resilience (30 pts)
+### Judging Criteria (default total: 100, professional hackathon style)
+- Problem Definition & Clarity (12 pts)
+- Innovation & Uniqueness (14 pts)
+- Technical Execution (18 pts)
+- AI Integration (18 pts)
+- User Impact & Value (14 pts)
+- Completeness & Polish (10 pts)
+- Presentation & Communication (8 pts)
+- Scalability & Viability (6 pts)
 
 ## 🛠 Tech Stack
 

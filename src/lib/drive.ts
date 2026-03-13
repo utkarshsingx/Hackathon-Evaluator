@@ -3,7 +3,7 @@
  * Supports multiple links (folders, docs) - e.g. presentation folder, coding folder, docs.
  * - Google Docs: exports as plain text (public docs only)
  * - Folders: when GOOGLE_DRIVE_API_KEY is set, lists contents and fetches all docs
- * - Broken/inaccessible links: reported for mark deduction
+ * - Broken/inaccessible links: reported for context (no mark deduction)
  */
 
 export interface DriveFetchResult {
