@@ -364,6 +364,13 @@ export function downloadPDF(
   if (rows.length === 0) return;
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  const headerTitle = String(filename.replace(/\.pdf$/i, ""));
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.text("" + headerTitle, PDF_PAGE_W / 2, PDF_MARGIN + 6, { align: "center" });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(PDF_BODY_FONT);
+
   const headers = [...PDF_COLUMNS];
   const body = rows.map((r) =>
     headers.map((h) => {
@@ -400,8 +407,9 @@ export function downloadPDF(
       fontSize: PDF_HEADER_FONT,
     },
     alternateRowStyles: { fillColor: [249, 250, 251] },
-    margin: { left: PDF_MARGIN, right: PDF_MARGIN },
+    margin: { left: PDF_MARGIN, right: PDF_MARGIN, top: PDF_MARGIN + 12 },
     tableWidth: tableW,
+    startY: PDF_MARGIN + 12,
   });
 
   doc.save(filename);
