@@ -46,6 +46,9 @@ export async function POST(request: NextRequest) {
       ? await fetchDriveContent(driveLink, driveApiKey)
       : null;
 
+    const driveNotAccessible =
+      !!driveLink && !!driveResult && !driveResult.accessible;
+
     const { result, usage } = await evaluateProject(
       apiKey,
       project,
@@ -58,7 +61,7 @@ export async function POST(request: NextRequest) {
         `[Hackathon Evaluator] ${project["Project Title"]}: prompt=${usage.promptTokens} completion=${usage.completionTokens} total=${usage.totalTokens}`
       );
     }
-    return NextResponse.json({ ...result, usage });
+    return NextResponse.json({ ...result, usage, driveNotAccessible: driveNotAccessible || undefined });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Evaluation failed";

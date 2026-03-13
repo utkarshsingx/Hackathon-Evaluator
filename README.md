@@ -10,13 +10,16 @@ A modern, responsive React + Next.js dashboard to evaluate hackathon projects fr
 ## ✨ Features
 
 ### Core Functionality
+- **Google Sign-in** — Sign in with Google to save and share evaluations
 - **API Key Setup** — Use Gemini or OpenAI; store API key in localStorage via Settings
 - **CSV Upload** — Drag-and-drop or click to upload submissions with validated headers
 - **Automated Evaluation** — Process all projects with AI using custom judging criteria
-- **Google Drive Integration** — Supports multiple links (folders for presentation, coding, docs). Fetches content from shared Google Docs; with `GOOGLE_DRIVE_API_KEY`, lists folder contents and fetches all docs (including subfolders)
+- **Google Drive Integration** — Supports multiple links (folders for presentation, coding, docs). Fetches content from shared Google Docs. For folders: use `GOOGLE_SERVICE_ACCOUNT_JSON`; participants must share their folder with the service account email (API key returns empty for shared folders)
 - **Dashboard** — Searchable, sortable table with Project Title, Score, and Status
+- **Evaluation List** — View all evaluations with uploader attribution; switch between or create new ones
 - **Detail View** — Side-by-side comparison of original submission and AI critique
-- **Export** — Download evaluated results as CSV
+- **Export** — Download evaluated results as CSV, Excel, or PDF
+- **Share Results** — Generate a shareable link anyone can use to view evaluation results (no login required)
 
 ### UI/UX
 - **Hyperspeed Hero** — WebGL-powered animated road with car lights and distortion effects
@@ -31,7 +34,8 @@ A modern, responsive React + Next.js dashboard to evaluate hackathon projects fr
 - Technical Execution (18 pts)
 - AI Integration (18 pts)
 - User Impact & Value (14 pts)
-- Completeness & Polish (10 pts)
+- Completeness & Polish (2 pts)
+- Demo Presentation (drive link) (8 pts) — No link = 0; link not accessible = max 2; accessible + content aligns = full marks
 - Presentation & Communication (8 pts)
 - Scalability & Viability (6 pts)
 
@@ -78,9 +82,17 @@ API keys are **server-side only** and never sent to the browser. Configure in Ve
 |----------|-------------|
 | `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) key for Gemini |
 | `OPENAI_API_KEY` | [OpenAI Platform](https://platform.openai.com/api-keys) key |
-| `GOOGLE_DRIVE_API_KEY` | Optional. [Google Cloud](https://console.cloud.google.com/) API key with Drive API enabled. When set, folder links are listed and all docs inside (including subfolders) are fetched. Folders must be shared ("Anyone with the link"). |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | **Recommended for Drive folders.** Full JSON string of a [Google service account key](https://console.cloud.google.com/iam-admin/serviceaccounts). Participants must share their Drive folder with the service account email (e.g. `xxx@project.iam.gserviceaccount.com`). API key alone returns empty for shared folders. |
+| `GOOGLE_DRIVE_API_KEY` | Optional fallback. API key with Drive API enabled; only works for public folders. |
+| `NEXT_PUBLIC_SUPABASE_URL` | [Supabase](https://supabase.com) project URL (for auth and data storage) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/public key |
+| `NEXT_PUBLIC_APP_URL` | Optional. Your app URL for share links (defaults to Vercel URL or localhost) |
 
-**Vercel:** Project Settings → Environment Variables → Add `GEMINI_API_KEY` and/or `OPENAI_API_KEY`
+**Supabase setup:** Create a project at [supabase.com](https://supabase.com), enable Google Auth in Authentication → Providers, and run the migration in `supabase/migrations/20240313000000_initial_schema.sql` via the SQL Editor.
+
+**Drive folder access (service account):** In [Google Cloud Console](https://console.cloud.google.com/) → IAM & Admin → Service Accounts → Create → Create key (JSON). Paste the full JSON as `GOOGLE_SERVICE_ACCOUNT_JSON`. Instruct participants to share their Drive folder with the service account email (e.g. `xxx@project.iam.gserviceaccount.com`) as Viewer.
+
+**Vercel:** Project Settings → Environment Variables → Add all keys above
 
 ## 📁 CSV Format
 
@@ -109,24 +121,36 @@ See `sample-submissions.csv` for a template.
 ```
 src/
 ├── app/
-│   ├── api/evaluate/     # API route for evaluation
-│   ├── globals.css       # Tailwind + design tokens
+│   ├── api/
+│   │   ├── evaluate/           # AI evaluation
+│   │   ├── evaluations/        # CRUD for evaluations
+│   │   ├── share/[slug]/      # Public share by slug
+│   │   └── auth/callback/     # OAuth callback
+│   ├── share/[slug]/page.tsx  # Public share page
+│   ├── globals.css
 │   ├── layout.tsx
 │   └── page.tsx
 ├── components/
 │   ├── ui/               # shadcn/ui components
 │   ├── dashboard.tsx     # Main dashboard
-│   ├── HeroSection.tsx    # Hero with Hyperspeed
-│   ├── Hyperspeed.tsx    # WebGL road animation
-│   ├── ShinyText.tsx     # Animated gradient text
+│   ├── AuthButton.tsx    # Google sign-in/out
+│   ├── AuthGuard.tsx     # Auth-gated content
+│   ├── EvaluationList.tsx # List of evaluations
+│   ├── ShareButton.tsx   # Copy share link
+│   ├── HeroSection.tsx   # Hero with Hyperspeed
+│   ├── Hyperspeed.tsx   # WebGL road animation
+│   ├── ShinyText.tsx    # Animated gradient text
 │   ├── theme-provider.tsx
 │   └── theme-toggle.tsx
-└── lib/
-    ├── ai.ts             # AI API (Gemini + OpenAI)
-    ├── csv.ts            # CSV parsing & export
-    ├── drive.ts          # Google Drive/Docs content fetch
-    ├── types.ts          # TypeScript types
-    └── utils.ts          # Utilities
+├── lib/
+│   ├── supabase/        # Supabase client (browser, server, middleware)
+│   ├── ai.ts            # AI API (Gemini + OpenAI)
+│   ├── csv.ts           # CSV parsing & export
+│   ├── drive.ts         # Google Drive/Docs content fetch
+│   ├── types.ts         # TypeScript types
+│   └── utils.ts         # Utilities
+└── supabase/
+    └── migrations/      # Database schema
 ```
 
 ## 📜 Scripts

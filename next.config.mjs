@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
+  serverExternalPackages: ["@supabase/ssr", "@supabase/supabase-js"],
 };
 
 export default nextConfig;

@@ -20,13 +20,14 @@ function buildCriteriaText(criteria: JudgingCriterion[]): string {
 function buildEvaluationPrompt(criteria: JudgingCriterion[]): string {
   const criteriaBlock = buildCriteriaText(criteria);
   const maxScore = criteria.reduce((sum, c) => sum + c.points, 0);
-  return `You are an expert hackathon judge at a professional, competitive hackathon. Evaluate STRICTLY based on the judging criteria.
+  return `You are an expert hackathon judge at a professional, competitive hackathon. Evaluate STRICTLY and critically. Default to skepticism—high scores must be EARNED with concrete evidence.
 
 SCORING RULES (follow strictly):
-1. USE THE FULL SCORE RANGE (0 to ${"{{maxScore}}"}) - differentiate projects. Avoid clustering scores (e.g. 75-85). Top projects: 80-100. Average: 50-70. Weak: 20-45. Poor: 0-20.
-2. BE HARSH on vague responses - If problem statement, AI usage, or explanation is generic, unclear, or lacks specifics, score LOW on that criterion. "We use AI to help users" without details = low AI Integration. "Solves a problem" without defining it = low Problem Definition.
-3. Reserve high scores (8+/10 equivalent per criterion) only for submissions with concrete details, clear value, and demonstrated execution.
-4. Each criterion must be scored independently - a vague submission gets low scores across multiple criteria.
+1. BE STRICT: Use the full score range. Top projects: 70-100. Average: 45-65. Weak: 20-45. Poor: 0-20. Avoid score inflation—most submissions should be average or below.
+2. PENALIZE VAGUENESS: Generic problem statements, "we use AI" without specifics, or hand-wavy explanations = LOW scores. "We use AI to help users" = 0-2 on AI Integration. "Solves a problem" without defining it = 0-3 on Problem Definition. If in doubt, score lower.
+3. Reserve high scores (≥75% of max per criterion) ONLY for submissions with concrete evidence, clear metrics, named tools/models, and demonstrated execution. No proof = no high score.
+4. Score each criterion independently—if one criterion is vague, score it low; do not compensate with higher scores elsewhere.
+5. Demo Presentation (drive link) (if in criteria): No link = 0. Link not accessible = 0. Accessible + content aligns = full marks. Content must substantiate the solution.
 
 ${criteriaBlock}
 
@@ -47,32 +48,51 @@ Respond with ONLY a valid JSON object (no markdown, no code blocks) with this ex
   "score": <number 0-${"{{maxScore}}"}>,
   "reason_why": "<50-100 words explaining the score>",
   "pros": ["<pro 1>", "<pro 2>", "<pro 3>"],
-  "cons": ["<con 1>", "<con 2>"]
-}`;
+  "cons": ["<con 1>", "<con 2>"],
+  "criteria_scores": [
+    {"name": "<exact criterion name from list above>", "max": <points from list>, "given": <0 to max, NEVER exceed max>},
+    ... one entry per criterion, in the SAME ORDER as the Judging Criteria list above
+  ]
+}
+The criteria_scores array MUST have one entry per criterion, using the EXACT names and max values from the Judging Criteria list. CRITICAL: "given" must be between 0 and "max" (inclusive) for each criterion - never exceed max. The sum of all "given" must equal "score".`;
 }
 
-function buildDriveContentBlock(drive: DriveFetchResult | null): string {
-  if (!drive) return "";
+function buildDriveContentBlock(
+  drive: DriveFetchResult | null,
+  hasDriveLink: boolean
+): string {
+  if (!hasDriveLink) {
+    return `
+
+Google Drive link status: NO LINK PROVIDED. For "Demo Presentation (drive link)" criterion: score 0.`;
+  }
+
+  if (!drive) {
+    return `
+
+Google Drive link status: Link was provided but could not be fetched. For "Demo Presentation (drive link)" criterion: deduct marks (max 2/8).`;
+  }
 
   if (!drive.accessible) {
     return `
 
-Google Drive link status: Content could not be fetched (${drive.error || "Link may be private or broken"}). Evaluate based on other submission details.`;
+Google Drive link status: NOT ACCESSIBLE - ${drive.error || "Link may be private or broken"}. For "Demo Presentation (drive link)" criterion: deduct marks (max 2/8). Evaluate based on other submission details.`;
   }
 
   if (drive.content && drive.isDoc) {
     return `
 
-Google Drive Content (extracted from shared docs/folders - use this to enrich your evaluation):
+Google Drive Content (extracted from shared docs/folders - use for "Demo Presentation (drive link)" and to enrich evaluation):
 ---
 ${drive.content.slice(0, 12000)}
 ${drive.content.length > 12000 ? "\n[... content truncated ...]" : ""}
----`;
+---
+If this content aligns with and substantiates the project description, give full marks for Demo Presentation (drive link).`;
   }
 
   return `
 
-Google Drive link status: Accessible (content could not be extracted - may be folders with no docs or non-doc files)`;
+Google Drive link status: Accessible (content could not be extracted - may be folders with no docs or non-doc files). For "Demo Presentation (drive link)": partial marks if link works but content not extractable.`;
 }
 
 function buildPrompt(
@@ -81,7 +101,9 @@ function buildPrompt(
   driveResult?: DriveFetchResult | null
 ): string {
   const maxScore = criteria.reduce((sum, c) => sum + c.points, 0);
-  const driveBlock = buildDriveContentBlock(driveResult ?? null);
+  const driveLink = project["Please share GOOGLE DRIVE link having your project demo video, files and images"]?.trim();
+  const hasDriveLink = !!driveLink;
+  const driveBlock = buildDriveContentBlock(driveResult ?? null, hasDriveLink);
   return buildEvaluationPrompt(criteria)
     .replace("{{maxScore}}", String(maxScore))
     .replace("{{projectTitle}}", project["Project Title"] || "N/A")
@@ -121,6 +143,21 @@ function parseJsonResponse(text: string): EvaluationResult {
   }
   if (!Array.isArray(parsed.cons)) {
     parsed.cons = [];
+  }
+  if (!Array.isArray(parsed.criteria_scores)) {
+    parsed.criteria_scores = undefined;
+  } else {
+    parsed.criteria_scores = parsed.criteria_scores
+      .filter(
+        (c: { name?: string; max?: number; given?: number }) =>
+          typeof c?.name === "string" &&
+          typeof c?.max === "number" &&
+          typeof c?.given === "number"
+      )
+      .map((c: { name: string; max: number; given: number }) => ({
+        ...c,
+        given: Math.max(0, Math.min(c.given, c.max)),
+      }));
   }
 
   return parsed;

@@ -188,7 +188,9 @@ export function exportToCSV(projects: EvaluatedProject[], maxScore = 100): strin
     } else if (p.evaluation) {
       const s = p.evaluation.score;
       row["Marks"] = typeof s === "number" ? Math.round(s) + "/" + maxScore : s;
-      row["Reason"] = p.evaluation.reason_why;
+      row["Reason"] = p.driveNotAccessible
+        ? (p.evaluation.reason_why || "") + " [Drive not accessible]"
+        : p.evaluation.reason_why;
       row["Pros"] = formatProsConsAsBullets(p.evaluation.pros ?? []);
       row["Cons"] = formatProsConsAsBullets(p.evaluation.cons ?? []);
     } else {
@@ -229,7 +231,9 @@ function getExportRows(projects: EvaluatedProject[], maxScore = 100): Record<str
     } else if (p.evaluation) {
       const s = p.evaluation.score;
       row["Marks"] = typeof s === "number" ? Math.round(s) + "/" + maxScore : s;
-      row["Reason"] = p.evaluation.reason_why;
+      row["Reason"] = p.driveNotAccessible
+        ? (p.evaluation.reason_why || "") + " [Drive not accessible]"
+        : p.evaluation.reason_why;
       row["Pros"] = formatProsConsAsBullets(p.evaluation.pros ?? []);
       row["Cons"] = formatProsConsAsBullets(p.evaluation.cons ?? []);
     } else {
@@ -270,7 +274,9 @@ function getPDFExportRows(
       marks = !isNaN(s)
         ? String(Math.round(s)) + "/" + String(maxScore)
         : "";
-      reason = ev.reason_why ?? "";
+      reason = p.driveNotAccessible
+        ? (ev.reason_why ?? "") + " [Drive not accessible]"
+        : (ev.reason_why ?? "");
       pros = formatProsConsAsBullets(ev.pros ?? []);
       cons = formatProsConsAsBullets(ev.cons ?? []);
     }

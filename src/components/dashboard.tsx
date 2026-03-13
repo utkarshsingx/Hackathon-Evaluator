@@ -52,12 +52,13 @@ import {
 import type { EvaluatedProject, HackathonProject, JudgingCriterion } from "@/lib/types";
 import { DEFAULT_CRITERIA } from "@/lib/types";
 import ShinyText from "@/components/ShinyText";
+import { AuthButton } from "@/components/AuthButton";
+import { AuthGuard } from "@/components/AuthGuard";
+import { EvaluationList, type EvaluationSummary } from "@/components/EvaluationList";
+import { ShareButton } from "@/components/ShareButton";
 
 const API_PROVIDER_STORAGE = "hackathon-api-provider";
-const CRITERIA_STORAGE = "hackathon-judging-criteria";
-const PROJECTS_STORAGE = "hackathon-projects";
 const USAGE_LOG_STORAGE = "hackathon-usage-log";
-const UPLOADED_FILENAME_STORAGE = "hackathon-uploaded-filename";
 
 interface UsageLogEntry {
   timestamp: string;
@@ -72,6 +73,8 @@ const BATCH_DELAY_MS = 2000;
 export function Dashboard() {
   const [apiProvider, setApiProvider] = useState<AIProvider>("gemini");
   const [showSettings, setShowSettings] = useState(false);
+  const [evaluationId, setEvaluationId] = useState<string | null>(null);
+  const [evaluations, setEvaluations] = useState<EvaluationSummary[]>([]);
   const [projects, setProjects] = useState<EvaluatedProject[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortConfig, setSortConfig] = useState<{
@@ -89,31 +92,14 @@ export function Dashboard() {
   const [criteria, setCriteria] = useState<JudgingCriterion[]>(DEFAULT_CRITERIA);
   const [usageLog, setUsageLog] = useState<UsageLogEntry[]>([]);
   const [uploadedFileName, setUploadedFileName] = useState<string>("");
+  const [loadingEvaluations, setLoadingEvaluations] = useState(true);
   const pauseRequestedRef = useRef(false);
   const { toast } = useToast();
 
-  // Load criteria and projects from localStorage on mount
+  // Load API provider and usage log from localStorage
   useEffect(() => {
     const storedProvider = localStorage.getItem(API_PROVIDER_STORAGE);
     if (storedProvider === "openai" || storedProvider === "gemini") setApiProvider(storedProvider);
-    const storedCriteria = localStorage.getItem(CRITERIA_STORAGE);
-    if (storedCriteria) {
-      try {
-        const parsed = JSON.parse(storedCriteria) as JudgingCriterion[];
-        if (Array.isArray(parsed) && parsed.length > 0) setCriteria(parsed);
-      } catch {
-        // ignore invalid stored criteria
-      }
-    }
-    const storedProjects = localStorage.getItem(PROJECTS_STORAGE);
-    if (storedProjects) {
-      try {
-        const parsed = JSON.parse(storedProjects) as EvaluatedProject[];
-        if (Array.isArray(parsed) && parsed.length > 0) setProjects(parsed);
-      } catch {
-        // ignore invalid stored projects
-      }
-    }
     const storedUsage = localStorage.getItem(USAGE_LOG_STORAGE);
     if (storedUsage) {
       try {
@@ -123,24 +109,81 @@ export function Dashboard() {
         // ignore
       }
     }
-    const storedFilename = localStorage.getItem(UPLOADED_FILENAME_STORAGE);
-    if (storedFilename) setUploadedFileName(storedFilename);
   }, []);
-
-  // Persist projects to localStorage whenever they change
-  useEffect(() => {
-    if (projects.length > 0) {
-      localStorage.setItem(PROJECTS_STORAGE, JSON.stringify(projects));
-    } else {
-      localStorage.removeItem(PROJECTS_STORAGE);
-    }
-  }, [projects]);
 
   useEffect(() => {
     if (usageLog.length > 0) {
       localStorage.setItem(USAGE_LOG_STORAGE, JSON.stringify(usageLog));
     }
   }, [usageLog]);
+
+  // Fetch evaluations list on mount
+  useEffect(() => {
+    fetch("/api/evaluations")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: EvaluationSummary[]) => {
+        setEvaluations(Array.isArray(data) ? data : []);
+        if (data?.length > 0 && !evaluationId) {
+          setEvaluationId(data[0].id);
+        }
+      })
+      .catch(() => setEvaluations([]))
+      .finally(() => setLoadingEvaluations(false));
+  }, []);
+
+  // Load default criteria when no evaluation is selected
+  useEffect(() => {
+    if (!evaluationId) {
+      fetch("/api/criteria")
+        .then((res) => (res.ok ? res.json() : { criteria: DEFAULT_CRITERIA }))
+        .then((data: { criteria?: JudgingCriterion[] }) => {
+          const c = Array.isArray(data.criteria) && data.criteria.length > 0 ? data.criteria : DEFAULT_CRITERIA;
+          setCriteria(c);
+        })
+        .catch(() => setCriteria(DEFAULT_CRITERIA));
+    }
+  }, [evaluationId]);
+
+  // Load evaluation when evaluationId changes
+  useEffect(() => {
+    if (!evaluationId) {
+      setProjects([]);
+      setUploadedFileName("");
+      return;
+    }
+    fetch(`/api/evaluations/${evaluationId}`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load");
+        return res.json();
+      })
+      .then((data: { projects: EvaluatedProject[]; criteria?: JudgingCriterion[]; name?: string }) => {
+        setProjects(data.projects ?? []);
+        const apiCriteria = Array.isArray(data.criteria) && data.criteria.length > 0 ? data.criteria : [];
+        const byName = new Map(apiCriteria.map((c) => [c.name, c]));
+        const merged = apiCriteria.length === 0
+          ? DEFAULT_CRITERIA
+          : DEFAULT_CRITERIA.map((c) => byName.get(c.name) ?? c);
+        setCriteria(merged);
+        setUploadedFileName(data.name?.replace(/\.csv$/i, "") ?? "");
+        if (merged.length !== apiCriteria.length) {
+          fetch(`/api/evaluations/${evaluationId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ criteria: merged }),
+          }).catch(() => {});
+        }
+      })
+      .catch(() => {
+        toast({ title: "Failed to load evaluation", variant: "destructive" });
+      });
+  }, [evaluationId, toast]);
+
+  const refreshEvaluations = useCallback(() => {
+    fetch("/api/evaluations")
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data: EvaluationSummary[]) => setEvaluations(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, []);
 
   const handleFileUpload = useCallback(
     async (file: File) => {
@@ -165,9 +208,22 @@ export function Dashboard() {
           status: "pending" as const,
         }));
         const baseName = file.name.replace(/\.csv$/i, "");
+
+        const res = await fetch("/api/evaluations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: baseName,
+            projects: evaluated,
+            criteria,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Failed to create");
+
+        setEvaluationId(data.id);
         setUploadedFileName(baseName);
-        localStorage.setItem(UPLOADED_FILENAME_STORAGE, baseName);
-        setProjects(evaluated);
+        refreshEvaluations();
         toast({
           title: "CSV loaded",
           description: `${file.name} — ${evaluated.length} projects loaded.`,
@@ -181,7 +237,7 @@ export function Dashboard() {
           });
         } else {
           setCsvError({
-            title: "Could not read file",
+            title: "Could not upload",
             validation: {
               valid: false,
               missingHeaders: [],
@@ -193,7 +249,7 @@ export function Dashboard() {
         }
       }
     },
-    [toast]
+    [toast, criteria, refreshEvaluations]
   );
 
   const handleDrop = useCallback(
@@ -245,17 +301,7 @@ export function Dashboard() {
         );
 
         try {
-          const storedCriteria = localStorage.getItem(CRITERIA_STORAGE);
-          const judgingCriteria: JudgingCriterion[] = storedCriteria
-            ? (() => {
-                try {
-                  const p = JSON.parse(storedCriteria) as JudgingCriterion[];
-                  return Array.isArray(p) && p.length > 0 ? p : [...DEFAULT_CRITERIA];
-                } catch {
-                  return [...DEFAULT_CRITERIA];
-                }
-              })()
-            : [...DEFAULT_CRITERIA];
+          const judgingCriteria = criteria.length > 0 ? criteria : [...DEFAULT_CRITERIA];
           const storedProvider = (localStorage.getItem(API_PROVIDER_STORAGE) || "gemini") as AIProvider;
 
           const res = await fetch("/api/evaluate", {
@@ -271,7 +317,7 @@ export function Dashboard() {
           if (!res.ok) {
             throw new Error(data.error || "Evaluation failed");
           }
-          const { usage, ...result } = data;
+          const { usage, driveNotAccessible, ...result } = data;
           if (usage) {
             setUsageLog((prev) => [
               ...prev,
@@ -284,36 +330,48 @@ export function Dashboard() {
               },
             ]);
           }
+          const updated = {
+            ...project,
+            evaluation: result,
+            status: "processed" as const,
+            error: undefined,
+            driveNotAccessible: driveNotAccessible ?? false,
+          };
           setProjects((prev) =>
-            prev.map((p) =>
-              p.id === project.id
-                ? {
-                    ...p,
-                    evaluation: result,
-                    status: "processed" as const,
-                  }
-                : p
-            )
+            prev.map((p) => (p.id === project.id ? updated : p))
           );
+          if (evaluationId) {
+            fetch(`/api/evaluations/${evaluationId}/projects`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ project: updated }),
+            }).catch(() => {});
+          }
           const totalPts = judgingCriteria.reduce((s, c) => s + c.points, 0);
           toast({
             title: `Evaluated: ${project["Project Title"]}`,
-            description: `Score: ${result.score}/${totalPts}`,
+            description: driveNotAccessible
+              ? `Score: ${result.score}/${totalPts} (Drive not accessible)`
+              : `Score: ${result.score}/${totalPts}`,
             variant: "success",
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
+          const errProject = {
+            ...project,
+            status: "error" as const,
+            error: msg,
+          };
           setProjects((prev) =>
-            prev.map((p) =>
-              p.id === project.id
-                ? {
-                    ...p,
-                    status: "error" as const,
-                    error: msg,
-                  }
-                : p
-            )
+            prev.map((p) => (p.id === project.id ? errProject : p))
           );
+          if (evaluationId) {
+            fetch(`/api/evaluations/${evaluationId}/projects`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ project: errProject }),
+            }).catch(() => {});
+          }
           toast({
             title: `Error: ${project["Project Title"]}`,
             description: msg,
@@ -338,8 +396,9 @@ export function Dashboard() {
         description: "All projects have been evaluated.",
         variant: "success",
       });
+      refreshEvaluations();
     }
-  }, [projects, toast]);
+  }, [projects, toast, criteria, evaluationId, refreshEvaluations]);
 
   const pauseEvaluation = useCallback(() => {
     pauseRequestedRef.current = true;
@@ -347,21 +406,14 @@ export function Dashboard() {
 
   const evaluateSingleProject = useCallback(
     async (project: EvaluatedProject) => {
-      const storedCriteria = localStorage.getItem(CRITERIA_STORAGE);
-      const judgingCriteria: JudgingCriterion[] = storedCriteria
-        ? (() => {
-            try {
-              const p = JSON.parse(storedCriteria) as JudgingCriterion[];
-              return Array.isArray(p) && p.length > 0 ? p : [...DEFAULT_CRITERIA];
-            } catch {
-              return [...DEFAULT_CRITERIA];
-            }
-          })()
-        : [...DEFAULT_CRITERIA];
+      const judgingCriteria = criteria.length > 0 ? criteria : [...DEFAULT_CRITERIA];
       const storedProvider = (localStorage.getItem(API_PROVIDER_STORAGE) || "gemini") as AIProvider;
 
       setProjects((prev) =>
         prev.map((p) => (p.id === project.id ? { ...p, status: "processing" as const } : p))
+      );
+      setSelectedProject((prev) =>
+        prev?.id === project.id ? { ...prev, status: "processing" as const } : prev
       );
 
       try {
@@ -373,7 +425,7 @@ export function Dashboard() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Evaluation failed");
 
-        const { usage, ...result } = data;
+        const { usage, driveNotAccessible, ...result } = data;
         if (usage) {
           setUsageLog((prev) => [
             ...prev,
@@ -386,33 +438,54 @@ export function Dashboard() {
             },
           ]);
         }
+        const updated = {
+          ...project,
+          evaluation: result,
+          status: "processed" as const,
+          error: undefined,
+          driveNotAccessible: driveNotAccessible ?? false,
+        };
         setProjects((prev) =>
-          prev.map((p) =>
-            p.id === project.id
-              ? { ...p, evaluation: result, status: "processed" as const, error: undefined }
-              : p
-          )
+          prev.map((p) => (p.id === project.id ? updated : p))
         );
         setSelectedProject((prev) =>
-          prev?.id === project.id ? { ...prev, evaluation: result, status: "processed" as const, error: undefined } : prev
+          prev?.id === project.id ? { ...prev, ...updated } : prev
         );
+        if (evaluationId) {
+          fetch(`/api/evaluations/${evaluationId}/projects`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ project: updated }),
+          }).then(() => refreshEvaluations()).catch(() => {});
+        }
+        const totalPts = judgingCriteria.reduce((s, c) => s + c.points, 0);
         toast({
           title: "Re-evaluated",
-          description: `${project["Project Title"]} — Score: ${result.score}/${judgingCriteria.reduce((s, c) => s + c.points, 0)}`,
+          description: driveNotAccessible
+            ? `${project["Project Title"]} — Score: ${result.score}/${totalPts} (Drive not accessible)`
+            : `${project["Project Title"]} — Score: ${result.score}/${totalPts}`,
           variant: "success",
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
+        const errProject = { ...project, status: "error" as const, error: msg };
         setProjects((prev) =>
-          prev.map((p) => (p.id === project.id ? { ...p, status: "error" as const, error: msg } : p))
+          prev.map((p) => (p.id === project.id ? errProject : p))
         );
         setSelectedProject((prev) =>
-          prev?.id === project.id ? { ...prev, status: "error" as const, error: msg } : prev
+          prev?.id === project.id ? { ...prev, ...errProject } : prev
         );
+        if (evaluationId) {
+          fetch(`/api/evaluations/${evaluationId}/projects`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ project: errProject }),
+          }).catch(() => {});
+        }
         toast({ title: "Evaluation failed", description: msg, variant: "destructive" });
       }
     },
-    [toast]
+    [toast, criteria, evaluationId, refreshEvaluations]
   );
 
   const handleReEvaluate = useCallback(
@@ -491,41 +564,6 @@ export function Dashboard() {
     URL.revokeObjectURL(url);
     toast({ title: "Usage log downloaded", variant: "success" });
   }, [usageLog, toast]);
-
-  const handleFlagCannotEvaluate = useCallback(
-    (project: EvaluatedProject) => {
-      setProjects((prev) =>
-        prev.map((p) =>
-          p.id === project.id
-            ? {
-                ...p,
-                cannotEvaluate: true,
-                evaluation: undefined,
-                status: "processed" as const,
-                error: undefined,
-              }
-            : p
-        )
-      );
-      setSelectedProject((prev) =>
-        prev?.id === project.id
-          ? {
-              ...prev,
-              cannotEvaluate: true,
-              evaluation: undefined,
-              status: "processed" as const,
-              error: undefined,
-            }
-          : prev
-      );
-      toast({
-        title: "Flagged",
-        description: "Project marked as Cannot be evaluated (no Drive access).",
-        variant: "success",
-      });
-    },
-    []
-  );
 
   const filteredProjects = projects.filter((p) =>
     searchQuery
@@ -636,13 +674,14 @@ export function Dashboard() {
 
   const maxScore =
     criteria.length > 0 ? criteria.reduce((s, c) => s + c.points, 0) : DEFAULT_CRITERIA.reduce((s, c) => s + c.points, 0);
-  const getScoreBadge = (score: number) => {
+  const getScoreBadge = (score: number, large?: boolean) => {
     const pct = maxScore > 0 ? score / maxScore : 0;
     const isHigh = pct >= 0.8;
     const isMid = pct >= 0.6 && !isHigh;
+    const sizeClass = large ? "min-w-[4rem] px-3 py-1.5 text-2xl sm:text-3xl" : "min-w-[2.5rem] px-2 py-0.5 text-sm";
     return (
       <span
-        className={`inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 rounded-md text-sm font-bold ${
+        className={`inline-flex items-center justify-center rounded-md font-bold ${sizeClass} ${
           isHigh ? "bg-chart-2/25 text-chart-2" : isMid ? "bg-chart-3/25 text-chart-3" : "bg-chart-5/25 text-chart-5"
         }`}
       >
@@ -660,7 +699,7 @@ export function Dashboard() {
     <div className="relative min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-xl">
-        <div className="flex h-12 sm:h-16 items-center justify-center px-3 sm:px-4 max-w-7xl mx-auto">
+        <div className="flex h-12 sm:h-16 items-center justify-between px-3 sm:px-4 max-w-7xl mx-auto gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -670,10 +709,12 @@ export function Dashboard() {
             <Settings className="h-4 w-4 shrink-0" />
             Settings
           </Button>
+          <AuthButton />
         </div>
       </header>
 
       <main className="container px-3 sm:px-4 py-4 sm:py-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
+        <AuthGuard>
         {/* Settings Dialog */}
         <Dialog open={showSettings} onOpenChange={setShowSettings}>
           <DialogContent className="w-[calc(100%-2rem)] max-w-lg max-h-[85vh] sm:max-h-[90vh] overflow-y-auto mx-4">
@@ -719,8 +760,9 @@ export function Dashboard() {
               <div className="space-y-4">
                 <h3 className="font-semibold text-sm text-foreground">Judging Criteria</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Define the criteria for evaluating projects. Each criterion has a name,
-                  points, and optional description. Total:{" "}
+                  Define the criteria for evaluating projects. These criteria are used by the AI
+                  and shown in the project detail modal. Each criterion has a name, points, and
+                  optional description. Total:{" "}
                   <span className="font-medium text-foreground">
                     {criteria.reduce((s, c) => s + c.points, 0)} points
                   </span>
@@ -742,7 +784,13 @@ export function Dashboard() {
                             const next = [...criteria];
                             next[idx] = { ...next[idx], name: e.target.value };
                             setCriteria(next);
-                            localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(next));
+                            if (evaluationId) {
+                              fetch(`/api/evaluations/${evaluationId}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ criteria: next }),
+                              }).catch(() => {});
+                            }
                           }}
                           className="h-9 font-medium flex-1 min-w-0"
                         />
@@ -757,8 +805,14 @@ export function Dashboard() {
                             if (!isNaN(v) && v >= 1) {
                               const next = [...criteria];
                               next[idx] = { ...next[idx], points: v };
-                              setCriteria(next);
-                              localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(next));
+                            setCriteria(next);
+                            if (evaluationId) {
+                              fetch(`/api/evaluations/${evaluationId}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ criteria: next }),
+                              }).catch(() => {});
+                            }
                             }
                           }}
                           className="h-9 w-14 shrink-0"
@@ -770,7 +824,13 @@ export function Dashboard() {
                           onClick={() => {
                             const next = criteria.filter((_, i) => i !== idx);
                             setCriteria(next);
-                            localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(next.length ? next : []));
+                            if (evaluationId) {
+                              fetch(`/api/evaluations/${evaluationId}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ criteria: next.length ? next : [] }),
+                              }).catch(() => {});
+                            }
                           }}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -782,8 +842,14 @@ export function Dashboard() {
                         onChange={(e) => {
                           const next = [...criteria];
                           next[idx] = { ...next[idx], description: e.target.value || undefined };
-                          setCriteria(next);
-                          localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(next));
+                            setCriteria(next);
+                            if (evaluationId) {
+                              fetch(`/api/evaluations/${evaluationId}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ criteria: next }),
+                              }).catch(() => {});
+                            }
                         }}
                         className="h-8 text-sm w-full min-w-0"
                       />
@@ -797,8 +863,14 @@ export function Dashboard() {
                     className="gap-2 flex-1"
                     onClick={() => {
                       const next = [...criteria, { name: "New criterion", points: 1, description: "" }];
-                      setCriteria(next);
-                      localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(next));
+                            setCriteria(next);
+                            if (evaluationId) {
+                              fetch(`/api/evaluations/${evaluationId}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ criteria: next }),
+                              }).catch(() => {});
+                            }
                     }}
                   >
                     <Plus className="h-4 w-4" />
@@ -809,9 +881,66 @@ export function Dashboard() {
                     size="sm"
                     className="shrink-0"
                     onClick={() => {
-                      setCriteria([...DEFAULT_CRITERIA]);
-                      localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(DEFAULT_CRITERIA));
-                      toast({ title: "Reset to defaults", description: "Judging criteria updated.", variant: "success" });
+                      fetch("/api/criteria", {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ criteria }),
+                      })
+                        .then((res) => {
+                          if (res.ok) {
+                            toast({
+                              title: "Saved as default",
+                              description: "New evaluations will use these criteria.",
+                              variant: "success",
+                            });
+                          }
+                        })
+                        .catch(() => {});
+                    }}
+                  >
+                    Save as default
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => {
+                      fetch("/api/criteria")
+                        .then((res) => (res.ok ? res.json() : { criteria: DEFAULT_CRITERIA }))
+                        .then((data: { criteria?: JudgingCriterion[] }) => {
+                          const defaultCriteria =
+                            Array.isArray(data.criteria) && data.criteria.length > 0
+                              ? data.criteria
+                              : DEFAULT_CRITERIA;
+                          setCriteria([...defaultCriteria]);
+                          if (evaluationId) {
+                            fetch(`/api/evaluations/${evaluationId}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ criteria: defaultCriteria }),
+                            }).catch(() => {});
+                          }
+                          toast({
+                            title: "Reset to defaults",
+                            description: "Judging criteria updated.",
+                            variant: "success",
+                          });
+                        })
+                        .catch(() => {
+                          setCriteria([...DEFAULT_CRITERIA]);
+                          if (evaluationId) {
+                            fetch(`/api/evaluations/${evaluationId}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ criteria: DEFAULT_CRITERIA }),
+                            }).catch(() => {});
+                          }
+                          toast({
+                            title: "Reset to defaults",
+                            description: "Judging criteria updated.",
+                            variant: "success",
+                          });
+                        });
                     }}
                   >
                     Reset to default
@@ -879,6 +1008,16 @@ export function Dashboard() {
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Evaluation List */}
+        {!loadingEvaluations && (
+          <EvaluationList
+            evaluations={evaluations}
+            activeId={evaluationId}
+            onSelect={setEvaluationId}
+            onCreateNew={() => setEvaluationId(null)}
+          />
+        )}
 
         {/* CSV Upload */}
         <Card className="shadow-soft overflow-hidden animate-in-slide-slow">
@@ -1083,6 +1222,12 @@ export function Dashboard() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+                {evaluationId && (
+                  <ShareButton
+                    evaluationId={evaluationId}
+                    className="gap-1.5 h-10 sm:h-11 px-3 sm:px-4 text-sm"
+                  />
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -1098,46 +1243,48 @@ export function Dashboard() {
 
             <Card className="shadow-soft overflow-hidden animate-in-slide">
               <CardContent className="p-0">
-                <div className="overflow-x-auto -mx-2 sm:mx-0">
-                  <table className="w-full min-w-[500px]">
+                <div className="-mx-2 sm:mx-0">
+                  <table className="w-full">
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
-                        <th className="text-left p-2 sm:p-4 font-semibold text-foreground w-10 sm:w-14 shrink-0 text-xs sm:text-base">
-                          S.No
+                        <th className="text-left p-2 sm:p-4 font-semibold w-10 sm:w-14 shrink-0 text-xs sm:text-base">
+                          <span className="text-glow">
+                            <ShinyText text="S.No" speed={2} color="var(--foreground)" shineColor="var(--primary)" spread={120} direction="left" />
+                          </span>
                         </th>
                         <th
-                          className="text-left p-2 sm:p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
+                          className="text-left p-2 sm:p-4 font-semibold cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
                           onClick={() => toggleSort("title")}
                         >
-                          <span className="flex items-center gap-1">
-                            Project Title
+                          <span className="flex items-center gap-1 text-glow">
+                            <ShinyText text="Project Title" speed={2} color="var(--foreground)" shineColor="var(--primary)" spread={120} direction="left" />
                             <SortIcon column="title" />
                           </span>
                         </th>
                         <th
-                          className="text-left p-2 sm:p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
+                          className="text-left p-2 sm:p-4 font-semibold cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
                           onClick={() => toggleSort("score")}
                         >
-                          <span className="flex items-center gap-1">
-                            Total Score
+                          <span className="flex items-center gap-1 whitespace-nowrap text-glow">
+                            <ShinyText text="Total Score" speed={2} color="var(--foreground)" shineColor="var(--primary)" spread={120} direction="left" />
                             <SortIcon column="score" />
                           </span>
                         </th>
                         <th
-                          className="text-left p-2 sm:p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
+                          className="text-left p-2 sm:p-4 font-semibold cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
                           onClick={() => toggleSort("rank")}
                         >
-                          <span className="flex items-center gap-1">
-                            Rank
+                          <span className="flex items-center gap-1 text-glow">
+                            <ShinyText text="Rank" speed={2} color="var(--foreground)" shineColor="var(--primary)" spread={120} direction="left" />
                             <SortIcon column="rank" />
                           </span>
                         </th>
                         <th
-                          className="text-left p-2 sm:p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
+                          className="text-left p-2 sm:p-4 font-semibold cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
                           onClick={() => toggleSort("status")}
                         >
-                          <span className="flex items-center gap-1">
-                            Status
+                          <span className="flex items-center gap-1 text-glow">
+                            <ShinyText text="Status" speed={2} color="var(--foreground)" shineColor="var(--primary)" spread={120} direction="left" />
                             <SortIcon column="status" />
                           </span>
                         </th>
@@ -1155,7 +1302,7 @@ export function Dashboard() {
                           <td className="p-2 sm:p-4 text-muted-foreground font-medium w-10 sm:w-14 text-xs sm:text-base">
                             {idx + 1}
                           </td>
-                          <td className="p-2 sm:p-4 font-medium text-foreground text-sm sm:text-base max-w-[100px] sm:max-w-[200px] md:max-w-none truncate">
+                          <td className="p-2 sm:p-4 font-medium text-foreground text-sm sm:text-base break-words">
                             {project["Project Title"] || "Untitled"}
                           </td>
                           <td className="p-2 sm:p-4">
@@ -1179,7 +1326,17 @@ export function Dashboard() {
                             )}
                           </td>
                           <td className="p-2 sm:p-4">
-                            {getStatusBadge(project.status)}
+                            <div className="flex items-center gap-1.5">
+                              {getStatusBadge(project.status)}
+                              {project.driveNotAccessible && (
+                                <span
+                                  className="inline-flex text-amber-600 dark:text-amber-500"
+                                  title="Drive not accessible"
+                                >
+                                  <AlertTriangle className="h-4 w-4" />
+                                </span>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1223,6 +1380,7 @@ export function Dashboard() {
             </CardContent>
           </Card>
         )}
+        </AuthGuard>
       </main>
 
       {/* Detail View Modal */}
@@ -1235,7 +1393,16 @@ export function Dashboard() {
             <>
               <DialogHeader className="space-y-1">
                 <DialogTitle className="text-xl flex items-center gap-2">
-                  {selectedProject["Project Title"]}
+                  <span className="text-glow">
+                    <ShinyText
+                      text={selectedProject["Project Title"] || "Untitled"}
+                      speed={2}
+                      color="var(--foreground)"
+                      shineColor="var(--primary)"
+                      spread={120}
+                      direction="left"
+                    />
+                  </span>
                   {selectedProject.cannotEvaluate ? (
                     <span className="text-amber-600 dark:text-amber-500 text-sm font-medium px-2 py-0.5 rounded bg-amber-500/10">
                       Cannot be evaluated
@@ -1253,18 +1420,12 @@ export function Dashboard() {
                   {(selectedProject.evaluation ||
                     selectedProject.status === "error" ||
                     selectedProject.cannotEvaluate) && (
-                    <div className="flex gap-2 shrink-0">
-                      {!selectedProject.cannotEvaluate && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5"
-                          onClick={() => handleFlagCannotEvaluate(selectedProject)}
-                          title="Flag as cannot evaluate (no Drive access)"
-                        >
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      {selectedProject.driveNotAccessible && (
+                        <span className="text-amber-600 dark:text-amber-500 text-sm font-medium px-2 py-1 rounded bg-amber-500/10 inline-flex items-center gap-1">
                           <AlertTriangle className="h-3.5 w-3.5" />
-                          Flag: No Drive access
-                        </Button>
+                          Drive not accessible
+                        </span>
                       )}
                       <Button
                         variant="outline"
@@ -1272,14 +1433,23 @@ export function Dashboard() {
                         className="gap-1.5"
                         onClick={(e) =>
                           handleReEvaluate(
-                            { ...selectedProject, cannotEvaluate: false },
+                            { ...selectedProject, cannotEvaluate: false, driveNotAccessible: false },
                             e
                           )
                         }
-                        disabled={isProcessing}
+                        disabled={isProcessing || selectedProject.status === "processing"}
                       >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                        Re-evaluate
+                        {selectedProject.status === "processing" ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Re-evaluating...
+                          </>
+                        ) : (
+                          <>
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            Re-evaluate
+                          </>
+                        )}
                       </Button>
                     </div>
                   )}
@@ -1289,8 +1459,10 @@ export function Dashboard() {
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b border-border">
                     <FileSpreadsheet className="h-4 w-4 text-primary" />
-                    <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
-                      Original Submission
+                    <h3 className="font-semibold text-sm uppercase tracking-wider">
+                      <span className="text-glow">
+                        <ShinyText text="Original Submission" speed={2} color="var(--muted-foreground)" shineColor="var(--primary)" spread={120} direction="left" />
+                      </span>
                     </h3>
                   </div>
                   <div className="space-y-4 text-sm rounded-lg bg-muted/50 p-4">
@@ -1321,7 +1493,7 @@ export function Dashboard() {
                           href={selectedProject["Please share GOOGLE DRIVE link having your project demo video, files and images"]}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-primary underline hover:no-underline font-medium"
+                          className="text-primary underline hover:no-underline font-medium break-all block max-w-full"
                         >
                           {selectedProject["Please share GOOGLE DRIVE link having your project demo video, files and images"]}
                         </a>
@@ -1342,8 +1514,10 @@ export function Dashboard() {
                 <div className="space-y-4">
                   <div className="flex items-center gap-2 pb-2 border-b border-border">
                     <Sparkles className="h-4 w-4 text-primary" />
-                    <h3 className="font-semibold text-sm uppercase tracking-wider text-muted-foreground">
-                      AI Critique
+                    <h3 className="font-semibold text-sm uppercase tracking-wider">
+                      <span className="text-glow">
+                        <ShinyText text="AI Critique" speed={2} color="var(--muted-foreground)" shineColor="var(--primary)" spread={120} direction="left" />
+                      </span>
                     </h3>
                   </div>
                   {selectedProject.cannotEvaluate ? (
@@ -1360,7 +1534,7 @@ export function Dashboard() {
                     <div className="space-y-4 text-sm rounded-lg bg-primary/5 border border-primary/20 p-4">
                       <div>
                         <span className="font-medium text-muted-foreground block mb-1">Score</span>
-                        <div className="mt-1">{getScoreBadge(selectedProject.evaluation.score)}</div>
+                        <div className="mt-1">{getScoreBadge(selectedProject.evaluation.score, true)}</div>
                       </div>
                       <div>
                         <span className="font-medium text-muted-foreground block mb-1">Reason</span>
@@ -1387,6 +1561,48 @@ export function Dashboard() {
                             </li>
                           ))}
                         </ul>
+                      </div>
+                      <div>
+                        <span className="font-medium text-muted-foreground block mb-2">
+                          Score breakdown (by criteria from Settings)
+                        </span>
+                        <div className="rounded-lg border border-border overflow-hidden">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="bg-muted/50 border-b border-border">
+                                <th className="text-left p-2 sm:p-3 font-medium text-foreground">Criterion</th>
+                                <th className="text-right p-2 sm:p-3 font-medium text-foreground w-20">Max</th>
+                                <th className="text-right p-2 sm:p-3 font-medium text-foreground w-20">Given</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(() => {
+                                const scores = selectedProject.evaluation.criteria_scores ?? [];
+                                const scoresByName = new Map(scores.map((s) => [s.name, s]));
+                                const rows = criteria.map((c) => {
+                                  const s = scoresByName.get(c.name);
+                                  return s
+                                    ? { name: c.name, max: c.points, given: s.given }
+                                    : { name: c.name, max: c.points, given: null as number | null };
+                                });
+                                return rows;
+                              })().map((row, i) => (
+                                <tr key={i} className="border-b border-border last:border-0">
+                                  <td className="p-2 sm:p-3 text-foreground break-words">{row.name}</td>
+                                  <td className="p-2 sm:p-3 text-right text-muted-foreground">{row.max}</td>
+                                  <td className="p-2 sm:p-3 text-right font-medium text-foreground">
+                                    {typeof (row as { given?: number }).given === "number" ? (row as { given: number }).given : "—"}
+                                  </td>
+                                </tr>
+                              ))}
+                              <tr className="bg-muted/30 font-semibold">
+                                <td className="p-2 sm:p-3 text-foreground">Total</td>
+                                <td className="p-2 sm:p-3 text-right text-muted-foreground">{maxScore}</td>
+                                <td className="p-2 sm:p-3 text-right text-foreground">{selectedProject.evaluation.score}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     </div>
                   ) : selectedProject.status === "error" ? (
