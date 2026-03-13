@@ -1,22 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { evaluateProject, type AIProvider } from "@/lib/ai";
-import type { HackathonProject } from "@/lib/types";
+import { fetchDriveContent } from "@/lib/drive";
+import type { HackathonProject, JudgingCriterion } from "@/lib/types";
+
+const DRIVE_LINK_FIELD =
+  "Please share GOOGLE DRIVE link having your project demo video, files and images";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { apiKey, project, provider } = body as {
-      apiKey: string;
+    const { project, provider, criteria } = body as {
       project: HackathonProject;
       provider?: AIProvider;
+      criteria?: JudgingCriterion[];
     };
-
-    if (!apiKey?.trim()) {
-      return NextResponse.json(
-        { error: "API key is required" },
-        { status: 400 }
-      );
-    }
 
     if (!project) {
       return NextResponse.json(
@@ -25,7 +22,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await evaluateProject(apiKey, project, undefined, provider || "gemini");
+    const prov = provider || "gemini";
+    const apiKey =
+      prov === "openai"
+        ? process.env.OPENAI_API_KEY
+        : process.env.GEMINI_API_KEY;
+
+    if (!apiKey?.trim()) {
+      return NextResponse.json(
+        {
+          error:
+            prov === "openai"
+              ? "OPENAI_API_KEY is not configured. Add it in Vercel Environment Variables."
+              : "GEMINI_API_KEY is not configured. Add it in Vercel Environment Variables.",
+        },
+        { status: 503 }
+      );
+    }
+
+    const driveLink = project[DRIVE_LINK_FIELD]?.trim() || "";
+    const driveApiKey = process.env.GOOGLE_DRIVE_API_KEY;
+    const driveResult = driveLink
+      ? await fetchDriveContent(driveLink, driveApiKey)
+      : null;
+
+    const result = await evaluateProject(
+      apiKey,
+      project,
+      criteria,
+      prov,
+      driveResult
+    );
     return NextResponse.json(result);
   } catch (error) {
     const message =
