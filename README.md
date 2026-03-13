@@ -13,6 +13,7 @@ A modern, responsive React + Next.js dashboard to evaluate hackathon projects fr
 - **API Key Setup** — Use Gemini or OpenAI; store API key in localStorage via Settings
 - **CSV Upload** — Drag-and-drop or click to upload submissions with validated headers
 - **Automated Evaluation** — Process all projects with AI using custom judging criteria
+- **Google Drive Integration** — Supports multiple links (folders for presentation, coding, docs). Fetches content from shared Google Docs; with `GOOGLE_DRIVE_API_KEY`, lists folder contents and fetches all docs (including subfolders). **10 points deducted** if any link is broken or inaccessible
 - **Dashboard** — Searchable, sortable table with Project Title, Score, and Status
 - **Detail View** — Side-by-side comparison of original submission and AI critique
 - **Export** — Download evaluated results as CSV
@@ -43,25 +44,39 @@ A modern, responsive React + Next.js dashboard to evaluate hackathon projects fr
 ## 📋 Prerequisites
 
 - **Node.js 18+** (required for Next.js)
-- An API key from either:
-  - [Google AI Studio](https://aistudio.google.com/apikey) (Gemini)
-  - [OpenAI Platform](https://platform.openai.com/api-keys) (OpenAI)
+- API keys configured via environment variables (never exposed to the client)
 
 ## 🚀 Getting Started
 
 ```bash
 # Clone the repository
 git clone https://github.com/utkarshsingx/Hackathon-Evaluator.git
-cd hackathon-evaluator
+cd Hackathon-Evaluator
 
 # Install dependencies
 npm install
+
+# Configure API keys (copy .env.example to .env.local)
+cp .env.example .env.local
+# Edit .env.local and add your keys
 
 # Run development server
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+## 🔐 Environment Variables
+
+API keys are **server-side only** and never sent to the browser. Configure in Vercel or locally:
+
+| Variable | Description |
+|----------|-------------|
+| `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/apikey) key for Gemini |
+| `OPENAI_API_KEY` | [OpenAI Platform](https://platform.openai.com/api-keys) key |
+| `GOOGLE_DRIVE_API_KEY` | Optional. [Google Cloud](https://console.cloud.google.com/) API key with Drive API enabled. When set, folder links are listed and all docs inside (including subfolders) are fetched. Folders must be shared ("Anyone with the link"). |
+
+**Vercel:** Project Settings → Environment Variables → Add `GEMINI_API_KEY` and/or `OPENAI_API_KEY`
 
 ## 📁 CSV Format
 
@@ -105,6 +120,7 @@ src/
 └── lib/
     ├── ai.ts             # AI API (Gemini + OpenAI)
     ├── csv.ts            # CSV parsing & export
+    ├── drive.ts          # Google Drive/Docs content fetch
     ├── types.ts          # TypeScript types
     └── utils.ts          # Utilities
 ```
