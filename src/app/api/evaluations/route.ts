@@ -15,17 +15,10 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const admin = await isAdmin(user.id);
-    let query = supabase
+    const { data: evaluations, error } = await supabase
       .from("evaluations")
       .select("id, user_id, user_email, name, criteria_json, share_slug, created_at, updated_at, last_evaluated_at")
       .order("created_at", { ascending: false });
-
-    if (!admin) {
-      query = query.eq("user_id", user.id);
-    }
-
-    const { data: evaluations, error } = await query;
 
     if (error) {
       console.error("[Evaluations GET]", error);
@@ -35,7 +28,13 @@ export async function GET() {
       );
     }
 
-    return NextResponse.json(evaluations ?? []);
+    const admin = await isAdmin(user.id);
+    const list = (evaluations ?? []).map((e) => {
+      const { user_email, ...rest } = e;
+      return admin ? e : { ...rest, user_email: null };
+    });
+
+    return NextResponse.json(list);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to fetch evaluations";
     return NextResponse.json({ error: msg }, { status: 500 });

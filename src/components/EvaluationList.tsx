@@ -23,7 +23,6 @@ interface EvaluationListProps {
   onCreateNew: () => void;
   onDelete?: (id: string) => void;
   isAdmin?: boolean;
-  currentUserId?: string | null;
 }
 
 export function EvaluationList({
@@ -33,7 +32,6 @@ export function EvaluationList({
   onCreateNew,
   onDelete,
   isAdmin,
-  currentUserId,
 }: EvaluationListProps) {
   const formatDate = (iso: string) => {
     const d = new Date(iso);
@@ -60,7 +58,7 @@ export function EvaluationList({
       <CardContent className="p-3 sm:p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-sm text-foreground">
-            {isAdmin ? "All evaluations" : "Your evaluations"}
+            {isAdmin ? "All evaluations" : "Evaluations"}
           </h3>
           <Button variant="outline" size="sm" onClick={onCreateNew} className="min-h-[44px]">
             New
@@ -73,7 +71,7 @@ export function EvaluationList({
         ) : (
           <ul className="space-y-1.5 max-h-56 sm:max-h-64 overflow-y-auto overflow-x-hidden -mx-1 px-1 overscroll-contain">
             {evaluations.map((e, idx) => {
-              const canDelete = onDelete && (isAdmin || (currentUserId && e.user_id === currentUserId));
+              const canDelete = onDelete && isAdmin;
               return (
                 <li key={e.id}>
                   <div className="flex items-stretch gap-1">

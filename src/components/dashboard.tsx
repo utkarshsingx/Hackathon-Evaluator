@@ -31,6 +31,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -96,7 +97,7 @@ export function Dashboard() {
   const [uploadedFileName, setUploadedFileName] = useState<string>("");
   const [loadingEvaluations, setLoadingEvaluations] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const pauseRequestedRef = useRef(false);
   const { toast } = useToast();
 
@@ -125,9 +126,8 @@ export function Dashboard() {
   useEffect(() => {
     fetch("/api/admin")
       .then((res) => (res.ok ? res.json() : { isAdmin: false, userId: null }))
-      .then((data: { isAdmin?: boolean; userId?: string | null }) => {
+      .then((data: { isAdmin?: boolean }) => {
         setIsAdmin(data.isAdmin ?? false);
-        setCurrentUserId(data.userId ?? null);
       })
       .catch(() => {});
   }, []);
@@ -200,28 +200,31 @@ export function Dashboard() {
       .catch(() => {});
   }, []);
 
-  const handleDeleteEvaluation = useCallback(
-    async (id: string) => {
-      if (!window.confirm("Delete this evaluation? This cannot be undone.")) return;
-      try {
-        const res = await fetch(`/api/evaluations/${id}`, { method: "DELETE" });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error ?? "Failed to delete");
-        }
-        if (evaluationId === id) setEvaluationId(null);
-        refreshEvaluations();
-        toast({ title: "Evaluation deleted", variant: "success" });
-      } catch (err) {
-        toast({
-          title: "Delete failed",
-          description: err instanceof Error ? err.message : "Unknown error",
-          variant: "destructive",
-        });
+  const requestDeleteEvaluation = useCallback((id: string) => {
+    setDeleteTargetId(id);
+  }, []);
+
+  const confirmDeleteEvaluation = useCallback(async () => {
+    if (!deleteTargetId) return;
+    const id = deleteTargetId;
+    setDeleteTargetId(null);
+    try {
+      const res = await fetch(`/api/evaluations/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to delete");
       }
-    },
-    [evaluationId, refreshEvaluations, toast]
-  );
+      if (evaluationId === id) setEvaluationId(null);
+      refreshEvaluations();
+      toast({ title: "Evaluation deleted", variant: "success" });
+    } catch (err) {
+      toast({
+        title: "Delete failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+        variant: "destructive",
+      });
+    }
+  }, [deleteTargetId, evaluationId, refreshEvaluations, toast]);
 
   const handleFileUpload = useCallback(
     async (file: File) => {
@@ -738,15 +741,19 @@ export function Dashboard() {
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-xl supports-[padding:env(safe-area-inset-top)]:pt-[env(safe-area-inset-top)]">
         <div className="flex min-h-12 sm:h-16 items-center justify-between px-3 sm:px-4 max-w-7xl mx-auto gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowSettings(true)}
-            className="gap-1.5 sm:gap-2 min-h-[44px] h-11 sm:h-10 text-sm"
-          >
-            <Settings className="h-4 w-4 shrink-0" />
-            Settings
-          </Button>
+          {isAdmin ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSettings(true)}
+              className="gap-1.5 sm:gap-2 min-h-[44px] h-11 sm:h-10 text-sm"
+            >
+              <Settings className="h-4 w-4 shrink-0" />
+              Settings
+            </Button>
+          ) : (
+            <div className="flex-1" />
+          )}
           <AuthButton />
         </div>
       </header>
@@ -1047,6 +1054,32 @@ export function Dashboard() {
           </DialogContent>
         </Dialog>
 
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={!!deleteTargetId} onOpenChange={(open) => !open && setDeleteTargetId(null)}>
+          <DialogContent className="w-[calc(100%-2rem)] max-w-md mx-2 sm:mx-4">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <AlertTriangle className="h-5 w-5" />
+                Delete evaluation
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-muted-foreground">
+              Delete this evaluation? This cannot be undone.
+            </p>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" onClick={() => setDeleteTargetId(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={confirmDeleteEvaluation}
+              >
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Evaluation List */}
         {!loadingEvaluations && (
           <EvaluationList
@@ -1054,9 +1087,8 @@ export function Dashboard() {
             activeId={evaluationId}
             onSelect={setEvaluationId}
             onCreateNew={() => setEvaluationId(null)}
-            onDelete={handleDeleteEvaluation}
+            onDelete={requestDeleteEvaluation}
             isAdmin={isAdmin}
-            currentUserId={currentUserId}
           />
         )}
 
