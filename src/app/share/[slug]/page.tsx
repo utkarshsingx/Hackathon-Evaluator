@@ -95,8 +95,8 @@ export default function SharePage() {
         <p className="text-muted-foreground text-center max-w-md">
           This link may have expired or the evaluation was removed.
         </p>
-        <Button asChild variant="outline">
-          <Link href="/" className="gap-2">
+        <Button asChild variant="outline" className="min-h-[44px] h-11 gap-2">
+          <Link href="/">
             <ArrowLeft className="h-4 w-4" />
             Back to Hackathon Evaluator
           </Link>
@@ -248,8 +248,8 @@ export default function SharePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-xl">
-        <div className="flex h-12 sm:h-16 items-center justify-between px-4 max-w-7xl mx-auto gap-4">
+      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-xl supports-[padding:env(safe-area-inset-top)]:pt-[env(safe-area-inset-top)]">
+        <div className="flex min-h-12 sm:h-16 items-center justify-between px-4 max-w-7xl mx-auto gap-2 sm:gap-4">
           <Button asChild variant="ghost" size="sm" className="gap-2">
             <Link href="/">
               <ArrowLeft className="h-4 w-4" />
@@ -261,7 +261,7 @@ export default function SharePage() {
           </span>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="gap-1.5">
+              <Button variant="outline" size="sm" className="gap-1.5 min-h-[44px] h-11">
                 <Download className="h-4 w-4" />
                 Export
                 <ChevronDown className="h-4 w-4" />
@@ -285,14 +285,14 @@ export default function SharePage() {
         </div>
       </header>
 
-      <main className="container px-4 py-6 sm:py-8 max-w-7xl mx-auto">
+      <main className="container px-4 py-6 sm:py-8 pb-[max(1.5rem,env(safe-area-inset-bottom))] max-w-7xl mx-auto">
         <Card className="shadow-soft mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileSpreadsheet className="h-5 w-5" />
-              {data.name}
+          <CardHeader className="px-4 sm:px-6">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg break-words">
+              <FileSpreadsheet className="h-5 w-5 shrink-0" />
+              <span className="min-w-0 truncate">{data.name}</span>
             </CardTitle>
-            <div className="text-sm text-muted-foreground">
+            <div className="text-xs sm:text-sm text-muted-foreground break-words">
               {data.user_email && (
                 <span>Uploaded by {data.user_email}</span>
               )}
@@ -309,15 +309,15 @@ export default function SharePage() {
 
         <Card className="shadow-soft overflow-hidden">
           <CardContent className="p-0">
-            <div>
-              <table className="w-full">
+            <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+              <table className="w-full min-w-[500px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
-                    <th className="text-left p-4 font-semibold text-foreground w-14">
+                    <th className="text-left p-2 sm:p-4 font-semibold text-foreground w-10 sm:w-14 shrink-0 text-xs sm:text-base">
                       S.No
                     </th>
                     <th
-                      className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
+                      className="text-left p-2 sm:p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
                       onClick={() => toggleSort("title")}
                     >
                       <span className="flex items-center gap-1">
@@ -326,16 +326,16 @@ export default function SharePage() {
                       </span>
                     </th>
                     <th
-                      className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
+                      className="text-left p-2 sm:p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
                       onClick={() => toggleSort("score")}
                     >
-                      <span className="flex items-center gap-1">
+                      <span className="flex items-center gap-1 whitespace-nowrap">
                         Total Score
                         <SortIcon column="score" />
                       </span>
                     </th>
                     <th
-                      className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
+                      className="text-left p-2 sm:p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
                       onClick={() => toggleSort("rank")}
                     >
                       <span className="flex items-center gap-1">
@@ -344,7 +344,7 @@ export default function SharePage() {
                       </span>
                     </th>
                     <th
-                      className="text-left p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none"
+                      className="text-left p-2 sm:p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
                       onClick={() => toggleSort("status")}
                     >
                       <span className="flex items-center gap-1">
@@ -363,13 +363,13 @@ export default function SharePage() {
                         idx % 2 === 1 ? "bg-muted/20" : ""
                       }`}
                     >
-                      <td className="p-4 text-muted-foreground font-medium">
+                      <td className="p-2 sm:p-4 text-muted-foreground font-medium w-10 sm:w-14 shrink-0 text-xs sm:text-base">
                         {idx + 1}
                       </td>
-                      <td className="p-4 font-medium text-foreground break-words">
+                      <td className="p-2 sm:p-4 font-medium text-foreground break-words text-sm sm:text-base min-w-[120px]">
                         {project["Project Title"] || "Untitled"}
                       </td>
-                      <td className="p-4">
+                      <td className="p-2 sm:p-4">
                         {project.cannotEvaluate ? (
                           <span className="text-amber-600 dark:text-amber-500 text-sm font-medium">
                             Cannot evaluate
@@ -380,7 +380,7 @@ export default function SharePage() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="p-4">
+                      <td className="p-2 sm:p-4">
                         {rankMap.has(project.id) ? (
                           <span className="font-medium text-foreground">
                             #{rankMap.get(project.id)}
@@ -389,7 +389,7 @@ export default function SharePage() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="p-4">
+                      <td className="p-2 sm:p-4">
                         <div className="flex items-center gap-1.5">
                           {getStatusBadge(project.status)}
                           {project.driveNotAccessible && (
@@ -416,7 +416,7 @@ export default function SharePage() {
         open={!!selectedProject}
         onOpenChange={(open) => !open && setSelectedProject(null)}
       >
-        <DialogContent className="w-[calc(100%-2rem)] max-w-5xl max-h-[90vh] overflow-y-auto shadow-xl mx-4 p-4 sm:p-6">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-5xl max-h-[90dvh] sm:max-h-[90vh] overflow-y-auto overflow-x-hidden shadow-xl mx-2 sm:mx-4 p-4 sm:p-6">
           {selectedProject && (
             <>
               <DialogHeader className="space-y-1">
@@ -559,8 +559,8 @@ export default function SharePage() {
                       {criteria.length > 0 && selectedProject.evaluation.criteria_scores && (
                         <div>
                           <span className="font-medium text-muted-foreground block mb-2">Score breakdown</span>
-                          <div className="rounded-lg border border-border overflow-hidden">
-                            <table className="w-full text-sm">
+                          <div className="rounded-lg border border-border overflow-x-auto">
+                            <table className="w-full text-sm min-w-[200px]">
                               <thead>
                                 <tr className="bg-muted/50 border-b border-border">
                                   <th className="text-left p-2 sm:p-3 font-medium text-foreground">Criterion</th>

@@ -42,8 +42,8 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   if (!user) {
     return (
-      <Card className="border-dashed border-border bg-muted/30 animate-in-scale max-w-md mx-auto">
-        <CardContent className="flex flex-col items-center justify-center py-12 sm:py-16 text-center px-6">
+      <Card className="border-dashed border-border bg-muted/30 animate-in-scale max-w-md mx-4 sm:mx-auto">
+        <CardContent className="flex flex-col items-center justify-center py-12 sm:py-16 text-center px-4 sm:px-6">
           <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-muted mb-6">
             <FileSpreadsheet className="h-10 w-10 text-muted-foreground" />
           </div>

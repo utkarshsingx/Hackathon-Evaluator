@@ -28,7 +28,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-screen bg-background font-sans antialiased">
+      <body className="min-h-screen bg-background font-sans antialiased touch-manipulation">
         <ThemeProvider defaultTheme="dark" storageKey="hackathon-evaluator-theme">
           {children}
           <Toaster />

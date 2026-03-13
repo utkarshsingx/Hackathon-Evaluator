@@ -698,13 +698,13 @@ export function Dashboard() {
   return (
     <div className="relative min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-xl">
-        <div className="flex h-12 sm:h-16 items-center justify-between px-3 sm:px-4 max-w-7xl mx-auto gap-2">
+      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-xl supports-[padding:env(safe-area-inset-top)]:pt-[env(safe-area-inset-top)]">
+        <div className="flex min-h-12 sm:h-16 items-center justify-between px-3 sm:px-4 max-w-7xl mx-auto gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setShowSettings(true)}
-            className="gap-1.5 sm:gap-2 h-9 sm:h-10 text-sm"
+            className="gap-1.5 sm:gap-2 min-h-[44px] h-11 sm:h-10 text-sm"
           >
             <Settings className="h-4 w-4 shrink-0" />
             Settings
@@ -713,11 +713,11 @@ export function Dashboard() {
         </div>
       </header>
 
-      <main className="container px-3 sm:px-4 py-4 sm:py-8 space-y-6 sm:space-y-8 max-w-7xl mx-auto">
+      <main className="container px-3 sm:px-4 py-4 sm:py-8 pb-[max(1.5rem,env(safe-area-inset-bottom))] space-y-6 sm:space-y-8 max-w-7xl mx-auto">
         <AuthGuard>
         {/* Settings Dialog */}
         <Dialog open={showSettings} onOpenChange={setShowSettings}>
-          <DialogContent className="w-[calc(100%-2rem)] max-w-lg max-h-[85vh] sm:max-h-[90vh] overflow-y-auto mx-4">
+          <DialogContent className="w-[calc(100%-2rem)] max-w-lg max-h-[85dvh] sm:max-h-[90vh] overflow-y-auto mx-2 sm:mx-4">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Settings className="h-5 w-5" />
@@ -733,7 +733,7 @@ export function Dashboard() {
                     type="button"
                     variant={apiProvider === "gemini" ? "default" : "outline"}
                     size="sm"
-                    className="flex-1"
+                    className="flex-1 min-h-[44px]"
                     onClick={() => {
                       setApiProvider("gemini");
                       localStorage.setItem(API_PROVIDER_STORAGE, "gemini");
@@ -745,7 +745,7 @@ export function Dashboard() {
                     type="button"
                     variant={apiProvider === "openai" ? "default" : "outline"}
                     size="sm"
-                    className="flex-1"
+                    className="flex-1 min-h-[44px]"
                     onClick={() => {
                       setApiProvider("openai");
                       localStorage.setItem(API_PROVIDER_STORAGE, "openai");
@@ -771,7 +771,7 @@ export function Dashboard() {
                   {criteria.map((c, idx) => (
                     <div
                       key={idx}
-                      className="p-3 rounded-lg border border-border bg-muted/30 space-y-2 overflow-hidden"
+                      className="p-3 sm:p-4 rounded-lg border border-border bg-muted/30 space-y-2 overflow-hidden"
                     >
                       <div className="flex gap-2 items-center min-w-0">
                         <span className="text-sm font-medium text-muted-foreground w-6 shrink-0">
@@ -856,11 +856,11 @@ export function Dashboard() {
                     </div>
                   ))}
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="gap-2 flex-1"
+                    className="gap-2 flex-1 min-w-[140px] min-h-[44px]"
                     onClick={() => {
                       const next = [...criteria, { name: "New criterion", points: 1, description: "" }];
                             setCriteria(next);
@@ -879,7 +879,7 @@ export function Dashboard() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="shrink-0"
+                    className="shrink-0 min-h-[44px]"
                     onClick={() => {
                       fetch("/api/criteria", {
                         method: "PATCH",
@@ -903,7 +903,7 @@ export function Dashboard() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="shrink-0"
+                    className="shrink-0 min-h-[44px]"
                     onClick={() => {
                       fetch("/api/criteria")
                         .then((res) => (res.ok ? res.json() : { criteria: DEFAULT_CRITERIA }))
@@ -953,7 +953,7 @@ export function Dashboard() {
 
         {/* CSV Validation Error Dialog */}
         <Dialog open={!!csvError} onOpenChange={(open) => !open && setCsvError(null)}>
-          <DialogContent className="w-[calc(100%-2rem)] max-w-lg mx-4 max-h-[85vh] overflow-y-auto">
+          <DialogContent className="w-[calc(100%-2rem)] max-w-lg mx-2 sm:mx-4 max-h-[85dvh] sm:max-h-[85vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-destructive">
                 <XCircle className="h-5 w-5 shrink-0" />
@@ -1094,7 +1094,7 @@ export function Dashboard() {
                 onClick={() =>
                   document.getElementById("csv-upload")?.click()
                 }
-                className="gap-2 h-10 px-6"
+                className="gap-2 min-h-[44px] h-11 px-6"
               >
                 <Upload className="h-4 w-4" />
                 Choose file
@@ -1170,14 +1170,14 @@ export function Dashboard() {
                   placeholder="Search projects..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 sm:pl-10 h-10 sm:h-11 rounded-lg focus-visible:ring-2 text-sm sm:text-base"
+                  className="pl-9 sm:pl-10 h-11 rounded-lg focus-visible:ring-2 text-sm sm:text-base"
                 />
               </div>
-              <div className="flex gap-2 w-full sm:w-auto">
+              <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                 <Button
                   onClick={processAll}
                   disabled={isProcessing || toProcessCount === 0}
-                  className="gap-1.5 sm:gap-2 flex-1 sm:flex-initial h-10 sm:h-11 px-4 sm:px-6 text-sm bg-primary hover:bg-primary/90"
+                  className="gap-1.5 sm:gap-2 flex-1 sm:flex-initial min-h-[44px] h-11 px-4 sm:px-6 text-sm bg-primary hover:bg-primary/90"
                 >
                   {isProcessing ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1190,7 +1190,7 @@ export function Dashboard() {
                   <Button
                     variant="outline"
                     onClick={pauseEvaluation}
-                    className="gap-1.5 sm:gap-2 h-10 sm:h-11 px-4 sm:px-6 text-sm border-destructive/50 text-destructive hover:bg-destructive/10"
+                    className="gap-1.5 sm:gap-2 min-h-[44px] h-11 px-4 sm:px-6 text-sm border-destructive/50 text-destructive hover:bg-destructive/10"
                   >
                     <Pause className="h-4 w-4" />
                     Pause
@@ -1200,7 +1200,7 @@ export function Dashboard() {
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="outline"
-                      className="gap-1.5 sm:gap-2 flex-1 sm:flex-initial h-10 sm:h-11 px-4 sm:px-6 text-sm"
+                      className="gap-1.5 sm:gap-2 flex-1 sm:flex-initial min-h-[44px] h-11 px-4 sm:px-6 text-sm"
                     >
                       <Download className="h-4 w-4" />
                       Export
@@ -1225,13 +1225,13 @@ export function Dashboard() {
                 {evaluationId && (
                   <ShareButton
                     evaluationId={evaluationId}
-                    className="gap-1.5 h-10 sm:h-11 px-3 sm:px-4 text-sm"
+                    className="gap-1.5 min-h-[44px] h-11 px-3 sm:px-4 text-sm"
                   />
                 )}
                 <Button
                   variant="outline"
                   size="sm"
-                  className="gap-1.5 h-10 sm:h-11 px-3 sm:px-4 text-sm"
+                  className="gap-1.5 min-h-[44px] h-11 px-3 sm:px-4 text-sm"
                   onClick={handleDownloadUsageLog}
                   title="Download AI usage/credits log"
                 >
@@ -1243,8 +1243,8 @@ export function Dashboard() {
 
             <Card className="shadow-soft overflow-hidden animate-in-slide">
               <CardContent className="p-0">
-                <div className="-mx-2 sm:mx-0">
-                  <table className="w-full">
+                <div className="-mx-2 sm:mx-0 overflow-x-auto">
+                  <table className="w-full min-w-[500px]">
                     <thead>
                       <tr className="border-b border-border bg-muted/50">
                         <th className="text-left p-2 sm:p-4 font-semibold w-10 sm:w-14 shrink-0 text-xs sm:text-base">
@@ -1388,7 +1388,7 @@ export function Dashboard() {
         open={!!selectedProject}
         onOpenChange={(open) => !open && setSelectedProject(null)}
       >
-        <DialogContent className="w-[calc(100%-2rem)] max-w-5xl max-h-[90vh] overflow-y-auto shadow-xl mx-4 p-4 sm:p-6">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-5xl max-h-[90dvh] sm:max-h-[90vh] overflow-y-auto overflow-x-hidden shadow-xl mx-2 sm:mx-4 p-4 sm:p-6">
           {selectedProject && (
             <>
               <DialogHeader className="space-y-1">
@@ -1430,7 +1430,7 @@ export function Dashboard() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="gap-1.5"
+                        className="gap-1.5 min-h-[44px]"
                         onClick={(e) =>
                           handleReEvaluate(
                             { ...selectedProject, cannotEvaluate: false, driveNotAccessible: false },
@@ -1562,12 +1562,12 @@ export function Dashboard() {
                           ))}
                         </ul>
                       </div>
-                      <div>
-                        <span className="font-medium text-muted-foreground block mb-2">
-                          Score breakdown (by criteria from Settings)
-                        </span>
-                        <div className="rounded-lg border border-border overflow-hidden">
-                          <table className="w-full text-sm">
+                        <div>
+                          <span className="font-medium text-muted-foreground block mb-2">
+                            Score breakdown (by criteria from Settings)
+                          </span>
+                          <div className="rounded-lg border border-border overflow-x-auto">
+                            <table className="w-full text-sm min-w-[200px]">
                             <thead>
                               <tr className="bg-muted/50 border-b border-border">
                                 <th className="text-left p-2 sm:p-3 font-medium text-foreground">Criterion</th>

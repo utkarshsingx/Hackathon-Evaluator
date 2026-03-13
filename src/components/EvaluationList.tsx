@@ -50,12 +50,12 @@ export function EvaluationList({
 
   return (
     <Card className="shadow-soft">
-      <CardContent className="p-4">
+      <CardContent className="p-3 sm:p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-sm text-foreground">
             Your evaluations
           </h3>
-          <Button variant="outline" size="sm" onClick={onCreateNew}>
+          <Button variant="outline" size="sm" onClick={onCreateNew} className="min-h-[44px]">
             New
           </Button>
         </div>
@@ -64,14 +64,14 @@ export function EvaluationList({
             No evaluations yet. Upload a CSV to create one.
           </p>
         ) : (
-          <ul className="space-y-1 max-h-48 overflow-y-auto">
+          <ul className="space-y-1 max-h-48 sm:max-h-56 overflow-y-auto -mx-1 px-1">
             {evaluations.map((e) => (
               <li key={e.id}>
                 <button
                   type="button"
                   onClick={() => onSelect(e.id)}
                   className={cn(
-                    "w-full text-left px-3 py-2 rounded-lg transition-colors flex items-start gap-2",
+                    "w-full text-left px-3 py-3 sm:py-2 rounded-lg transition-colors flex items-start gap-2 min-h-[44px] sm:min-h-0",
                     activeId === e.id
                       ? "bg-primary/15 text-primary border border-primary/30"
                       : "hover:bg-muted/50 text-foreground"

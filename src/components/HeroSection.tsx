@@ -55,7 +55,7 @@ export function HeroSection() {
         </p>
         <Button
           size="lg"
-          className="mt-6 sm:mt-8 gap-2 pointer-events-auto text-sm sm:text-base h-10 sm:h-11 px-6"
+          className="mt-6 sm:mt-8 gap-2 pointer-events-auto text-sm sm:text-base min-h-[48px] h-12 sm:h-11 px-8 touch-manipulation"
           onClick={scrollToDashboard}
         >
           Get Started

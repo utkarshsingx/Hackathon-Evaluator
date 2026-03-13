@@ -17,31 +17,41 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const slug = nanoid(12);
-
-    // RLS ensures only owner can update; no need to filter by user_id
-    const { data, error } = await supabase
+    // Reuse existing share slug if present (link never expires)
+    const { data: existing } = await supabase
       .from("evaluations")
-      .update({
-        share_slug: slug,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
       .select("share_slug")
+      .eq("id", id)
       .maybeSingle();
 
-    if (error) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: 500 }
-      );
-    }
+    let slug: string;
+    if (existing?.share_slug) {
+      slug = existing.share_slug;
+    } else {
+      slug = nanoid(12);
+      const { data, error } = await supabase
+        .from("evaluations")
+        .update({
+          share_slug: slug,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", id)
+        .select("share_slug")
+        .maybeSingle();
 
-    if (!data) {
-      return NextResponse.json(
-        { error: "Evaluation not found or you don't have permission to share it" },
-        { status: 404 }
-      );
+      if (error) {
+        return NextResponse.json(
+          { error: error.message },
+          { status: 500 }
+        );
+      }
+
+      if (!data) {
+        return NextResponse.json(
+          { error: "Evaluation not found or you don't have permission to share it" },
+          { status: 404 }
+        );
+      }
     }
 
     // Prefer canonical URL so share links use production, not preview deployments

@@ -48,7 +48,7 @@ export function AuthButton() {
 
   if (loading) {
     return (
-      <Button variant="outline" size="sm" disabled className="h-9 gap-2">
+      <Button variant="outline" size="sm" disabled className="min-h-[44px] h-11 gap-2">
         <span className="h-4 w-4 animate-pulse rounded bg-muted" />
         Loading...
       </Button>
@@ -61,7 +61,7 @@ export function AuthButton() {
         variant="default"
         size="sm"
         onClick={signInWithGoogle}
-        className="h-9 gap-2"
+        className="min-h-[44px] h-11 gap-2 px-6"
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24">
           <path
