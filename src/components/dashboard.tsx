@@ -20,6 +20,8 @@ import {
   Trash2,
   Pause,
   RotateCcw,
+  FileText,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,9 +33,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import type { AIProvider } from "@/lib/ai";
-import { parseCSV, exportToCSV, downloadCSV, CSVValidationError } from "@/lib/csv";
+import {
+  parseCSV,
+  exportToCSV,
+  downloadCSV,
+  downloadExcel,
+  downloadPDF,
+  CSVValidationError,
+} from "@/lib/csv";
 import type { EvaluatedProject, HackathonProject, JudgingCriterion } from "@/lib/types";
 import { DEFAULT_CRITERIA } from "@/lib/types";
 import ShinyText from "@/components/ShinyText";
@@ -41,6 +56,16 @@ import ShinyText from "@/components/ShinyText";
 const API_PROVIDER_STORAGE = "hackathon-api-provider";
 const CRITERIA_STORAGE = "hackathon-judging-criteria";
 const PROJECTS_STORAGE = "hackathon-projects";
+const USAGE_LOG_STORAGE = "hackathon-usage-log";
+const UPLOADED_FILENAME_STORAGE = "hackathon-uploaded-filename";
+
+interface UsageLogEntry {
+  timestamp: string;
+  projectTitle: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 2000;
 
@@ -62,6 +87,8 @@ export function Dashboard() {
     validation: import("@/lib/csv").CSVValidationResult;
   } | null>(null);
   const [criteria, setCriteria] = useState<JudgingCriterion[]>(DEFAULT_CRITERIA);
+  const [usageLog, setUsageLog] = useState<UsageLogEntry[]>([]);
+  const [uploadedFileName, setUploadedFileName] = useState<string>("");
   const pauseRequestedRef = useRef(false);
   const { toast } = useToast();
 
@@ -87,6 +114,17 @@ export function Dashboard() {
         // ignore invalid stored projects
       }
     }
+    const storedUsage = localStorage.getItem(USAGE_LOG_STORAGE);
+    if (storedUsage) {
+      try {
+        const parsed = JSON.parse(storedUsage) as UsageLogEntry[];
+        if (Array.isArray(parsed)) setUsageLog(parsed);
+      } catch {
+        // ignore
+      }
+    }
+    const storedFilename = localStorage.getItem(UPLOADED_FILENAME_STORAGE);
+    if (storedFilename) setUploadedFileName(storedFilename);
   }, []);
 
   // Persist projects to localStorage whenever they change
@@ -97,6 +135,12 @@ export function Dashboard() {
       localStorage.removeItem(PROJECTS_STORAGE);
     }
   }, [projects]);
+
+  useEffect(() => {
+    if (usageLog.length > 0) {
+      localStorage.setItem(USAGE_LOG_STORAGE, JSON.stringify(usageLog));
+    }
+  }, [usageLog]);
 
   const handleFileUpload = useCallback(
     async (file: File) => {
@@ -120,10 +164,13 @@ export function Dashboard() {
           ...p,
           status: "pending" as const,
         }));
+        const baseName = file.name.replace(/\.csv$/i, "");
+        setUploadedFileName(baseName);
+        localStorage.setItem(UPLOADED_FILENAME_STORAGE, baseName);
         setProjects(evaluated);
         toast({
           title: "CSV loaded",
-          description: `${evaluated.length} projects loaded successfully.`,
+          description: `${file.name} — ${evaluated.length} projects loaded.`,
           variant: "success",
         });
       } catch (err) {
@@ -224,7 +271,19 @@ export function Dashboard() {
           if (!res.ok) {
             throw new Error(data.error || "Evaluation failed");
           }
-          const result = data;
+          const { usage, ...result } = data;
+          if (usage) {
+            setUsageLog((prev) => [
+              ...prev,
+              {
+                timestamp: new Date().toISOString(),
+                projectTitle: project["Project Title"],
+                promptTokens: usage.promptTokens ?? 0,
+                completionTokens: usage.completionTokens ?? 0,
+                totalTokens: usage.totalTokens ?? 0,
+              },
+            ]);
+          }
           setProjects((prev) =>
             prev.map((p) =>
               p.id === project.id
@@ -314,19 +373,32 @@ export function Dashboard() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Evaluation failed");
 
+        const { usage, ...result } = data;
+        if (usage) {
+          setUsageLog((prev) => [
+            ...prev,
+            {
+              timestamp: new Date().toISOString(),
+              projectTitle: project["Project Title"],
+              promptTokens: usage.promptTokens ?? 0,
+              completionTokens: usage.completionTokens ?? 0,
+              totalTokens: usage.totalTokens ?? 0,
+            },
+          ]);
+        }
         setProjects((prev) =>
           prev.map((p) =>
             p.id === project.id
-              ? { ...p, evaluation: data, status: "processed" as const, error: undefined }
+              ? { ...p, evaluation: result, status: "processed" as const, error: undefined }
               : p
           )
         );
         setSelectedProject((prev) =>
-          prev?.id === project.id ? { ...prev, evaluation: data, status: "processed" as const, error: undefined } : prev
+          prev?.id === project.id ? { ...prev, evaluation: result, status: "processed" as const, error: undefined } : prev
         );
         toast({
           title: "Re-evaluated",
-          description: `${project["Project Title"]} — Score: ${data.score}/${judgingCriteria.reduce((s, c) => s + c.points, 0)}`,
+          description: `${project["Project Title"]} — Score: ${result.score}/${judgingCriteria.reduce((s, c) => s + c.points, 0)}`,
           variant: "success",
         });
       } catch (err) {
@@ -346,28 +418,113 @@ export function Dashboard() {
   const handleReEvaluate = useCallback(
     (project: EvaluatedProject, e: React.MouseEvent) => {
       e.stopPropagation();
-      evaluateSingleProject({ ...project, status: "pending", evaluation: undefined, error: undefined });
+      evaluateSingleProject({
+        ...project,
+        status: "pending",
+        evaluation: undefined,
+        error: undefined,
+        cannotEvaluate: undefined,
+      });
     },
     [evaluateSingleProject]
   );
 
-  const handleExport = useCallback(() => {
-    if (projects.length === 0) {
+  const handleExport = useCallback(
+    (format: "csv" | "excel" | "pdf") => {
+      if (projects.length === 0) {
+        toast({
+          title: "No data",
+          description: "Upload a CSV and evaluate projects first.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const baseName = uploadedFileName || "hackathon-evaluations";
+      const exportName = `${baseName} - evaluation`;
+      if (format === "csv") {
+        const csv = exportToCSV(projects);
+        downloadCSV(csv, `${exportName}.csv`);
+      } else if (format === "excel") {
+        downloadExcel(projects, `${exportName}.xlsx`);
+      } else {
+        downloadPDF(projects, `${exportName}.pdf`);
+      }
       toast({
-        title: "No data",
-        description: "Upload a CSV and evaluate projects first.",
-        variant: "destructive",
+        title: "Export complete",
+        description: `${format.toUpperCase()} downloaded with original fields plus Marks, Reason, Pros & Cons.`,
+        variant: "success",
+      });
+    },
+    [projects, uploadedFileName, toast]
+  );
+
+  const handleDownloadUsageLog = useCallback(() => {
+    if (usageLog.length === 0) {
+      toast({
+        title: "No usage data",
+        description: "Evaluate projects to see AI credits/tokens used.",
+        variant: "default",
       });
       return;
     }
-    const csv = exportToCSV(projects);
-    downloadCSV(csv, "hackathon-evaluations.csv");
-    toast({
-      title: "Export complete",
-      description: "CSV downloaded with original fields plus Marks, Reason, Pros & Cons.",
-      variant: "success",
-    });
-  }, [projects, toast]);
+    const total = usageLog.reduce((s, e) => s + e.totalTokens, 0);
+    const lines = [
+      "Hackathon Evaluator - AI Usage Log",
+      `Generated: ${new Date().toISOString()}`,
+      `Total evaluations: ${usageLog.length}`,
+      `Total tokens used: ${total}`,
+      "",
+      "---",
+      "",
+      ...usageLog.map(
+        (e) =>
+          `[${e.timestamp}] ${e.projectTitle}: prompt=${e.promptTokens} completion=${e.completionTokens} total=${e.totalTokens}`
+      ),
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `hackathon-usage-log-${new Date().toISOString().slice(0, 10)}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Usage log downloaded", variant: "success" });
+  }, [usageLog, toast]);
+
+  const handleFlagCannotEvaluate = useCallback(
+    (project: EvaluatedProject) => {
+      setProjects((prev) =>
+        prev.map((p) =>
+          p.id === project.id
+            ? {
+                ...p,
+                cannotEvaluate: true,
+                evaluation: undefined,
+                status: "processed" as const,
+                error: undefined,
+              }
+            : p
+        )
+      );
+      setSelectedProject((prev) =>
+        prev?.id === project.id
+          ? {
+              ...prev,
+              cannotEvaluate: true,
+              evaluation: undefined,
+              status: "processed" as const,
+              error: undefined,
+            }
+          : prev
+      );
+      toast({
+        title: "Flagged",
+        description: "Project marked as Cannot be evaluated (no Drive access).",
+        variant: "success",
+      });
+    },
+    []
+  );
 
   const filteredProjects = projects.filter((p) =>
     searchQuery
@@ -382,13 +539,23 @@ export function Dashboard() {
     if (key === "title") {
       cmp = a["Project Title"].localeCompare(b["Project Title"]);
     } else if (key === "score") {
-      const sa = a.evaluation?.score ?? -1;
-      const sb = b.evaluation?.score ?? -1;
-      cmp = sa - sb;
+      if (a.cannotEvaluate && b.cannotEvaluate) cmp = 0;
+      else if (a.cannotEvaluate) cmp = 1;
+      else if (b.cannotEvaluate) cmp = -1;
+      else {
+        const sa = a.evaluation?.score ?? -1;
+        const sb = b.evaluation?.score ?? -1;
+        cmp = sa - sb;
+      }
     } else if (key === "rank") {
-      const sa = a.evaluation?.score ?? -1;
-      const sb = b.evaluation?.score ?? -1;
-      cmp = sb - sa;
+      if (a.cannotEvaluate && b.cannotEvaluate) cmp = 0;
+      else if (a.cannotEvaluate) cmp = 1;
+      else if (b.cannotEvaluate) cmp = -1;
+      else {
+        const sa = a.evaluation?.score ?? -1;
+        const sb = b.evaluation?.score ?? -1;
+        cmp = sb - sa;
+      }
     } else {
       cmp = a.status.localeCompare(b.status);
     }
@@ -396,6 +563,9 @@ export function Dashboard() {
   });
 
   const sortedByScore = [...filteredProjects].sort((a, b) => {
+    if (a.cannotEvaluate && b.cannotEvaluate) return 0;
+    if (a.cannotEvaluate) return 1;
+    if (b.cannotEvaluate) return -1;
     const sa = a.evaluation?.score ?? -1;
     const sb = b.evaluation?.score ?? -1;
     return sb - sa;
@@ -404,6 +574,7 @@ export function Dashboard() {
   let rank = 1;
   let prevScore: number | null = null;
   for (const p of sortedByScore) {
+    if (p.cannotEvaluate) continue;
     if (p.evaluation) {
       if (prevScore !== null && p.evaluation.score < prevScore) rank++;
       rankMap.set(p.id, rank);
@@ -618,19 +789,33 @@ export function Dashboard() {
                     </div>
                   ))}
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 w-full"
-                  onClick={() => {
-                    const next = [...criteria, { name: "New criterion", points: 1, description: "" }];
-                    setCriteria(next);
-                    localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(next));
-                  }}
-                >
-                  <Plus className="h-4 w-4" />
-                  Add criterion
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 flex-1"
+                    onClick={() => {
+                      const next = [...criteria, { name: "New criterion", points: 1, description: "" }];
+                      setCriteria(next);
+                      localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(next));
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add criterion
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => {
+                      setCriteria([...DEFAULT_CRITERIA]);
+                      localStorage.setItem(CRITERIA_STORAGE, JSON.stringify(DEFAULT_CRITERIA));
+                      toast({ title: "Reset to defaults", description: "Judging criteria updated.", variant: "success" });
+                    }}
+                  >
+                    Reset to default
+                  </Button>
+                </div>
               </div>
             </div>
           </DialogContent>
@@ -774,6 +959,11 @@ export function Dashboard() {
                 <Upload className="h-4 w-4" />
                 Choose file
               </Button>
+              {projects.length > 0 && uploadedFileName && (
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Current file: <span className="font-medium text-foreground">{uploadedFileName}.csv</span>
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -866,13 +1056,41 @@ export function Dashboard() {
                     Pause
                   </Button>
                 )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="gap-1.5 sm:gap-2 flex-1 sm:flex-initial h-10 sm:h-11 px-4 sm:px-6 text-sm"
+                    >
+                      <Download className="h-4 w-4" />
+                      Export
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleExport("csv")}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport("excel")}>
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Excel
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExport("pdf")}>
+                      <FileText className="h-4 w-4 mr-2" />
+                      PDF
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   variant="outline"
-                  onClick={handleExport}
-                  className="gap-1.5 sm:gap-2 flex-1 sm:flex-initial h-10 sm:h-11 px-4 sm:px-6 text-sm"
+                  size="sm"
+                  className="gap-1.5 h-10 sm:h-11 px-3 sm:px-4 text-sm"
+                  onClick={handleDownloadUsageLog}
+                  title="Download AI usage/credits log"
                 >
-                  <Download className="h-4 w-4" />
-                  Export CSV
+                  <BarChart3 className="h-4 w-4" />
+                  Usage log
                 </Button>
               </div>
             </div>
@@ -940,7 +1158,11 @@ export function Dashboard() {
                             {project["Project Title"] || "Untitled"}
                           </td>
                           <td className="p-2 sm:p-4">
-                            {project.evaluation ? (
+                            {project.cannotEvaluate ? (
+                              <span className="text-amber-600 dark:text-amber-500 text-sm font-medium">
+                                Cannot evaluate
+                              </span>
+                            ) : project.evaluation ? (
                               getScoreBadge(project.evaluation.score)
                             ) : (
                               <span className="text-muted-foreground">—</span>
@@ -956,24 +1178,7 @@ export function Dashboard() {
                             )}
                           </td>
                           <td className="p-2 sm:p-4">
-                            <div className="flex items-center gap-2">
-                              {getStatusBadge(project.status)}
-                              {(project.evaluation || project.status === "error") && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7 shrink-0"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleReEvaluate(project, e);
-                                  }}
-                                  disabled={isProcessing}
-                                  title="Re-evaluate"
-                                >
-                                  <RotateCcw className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
-                            </div>
+                            {getStatusBadge(project.status)}
                           </td>
                         </tr>
                       ))}
@@ -1030,8 +1235,12 @@ export function Dashboard() {
               <DialogHeader className="space-y-1">
                 <DialogTitle className="text-xl flex items-center gap-2">
                   {selectedProject["Project Title"]}
-                  {selectedProject.evaluation && (
-                    getScoreBadge(selectedProject.evaluation.score)
+                  {selectedProject.cannotEvaluate ? (
+                    <span className="text-amber-600 dark:text-amber-500 text-sm font-medium px-2 py-0.5 rounded bg-amber-500/10">
+                      Cannot be evaluated
+                    </span>
+                  ) : (
+                    selectedProject.evaluation && getScoreBadge(selectedProject.evaluation.score)
                   )}
                 </DialogTitle>
                 <div className="flex items-center justify-between gap-4">
@@ -1040,17 +1249,38 @@ export function Dashboard() {
                       ? "Original submission vs AI critique"
                       : "View submission details"}
                   </p>
-                  {(selectedProject.evaluation || selectedProject.status === "error") && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 shrink-0"
-                      onClick={(e) => handleReEvaluate(selectedProject, e)}
-                      disabled={isProcessing}
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      Re-evaluate
-                    </Button>
+                  {(selectedProject.evaluation ||
+                    selectedProject.status === "error" ||
+                    selectedProject.cannotEvaluate) && (
+                    <div className="flex gap-2 shrink-0">
+                      {!selectedProject.cannotEvaluate && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => handleFlagCannotEvaluate(selectedProject)}
+                          title="Flag as cannot evaluate (no Drive access)"
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          Flag: No Drive access
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={(e) =>
+                          handleReEvaluate(
+                            { ...selectedProject, cannotEvaluate: false },
+                            e
+                          )
+                        }
+                        disabled={isProcessing}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Re-evaluate
+                      </Button>
+                    </div>
                   )}
                 </div>
               </DialogHeader>
@@ -1115,7 +1345,17 @@ export function Dashboard() {
                       AI Critique
                     </h3>
                   </div>
-                  {selectedProject.evaluation ? (
+                  {selectedProject.cannotEvaluate ? (
+                    <div className="space-y-4 text-sm rounded-lg bg-amber-500/10 border border-amber-500/30 p-4">
+                      <p className="text-amber-700 dark:text-amber-400 font-medium">
+                        Cannot be evaluated as there was no access to Drive.
+                      </p>
+                      <p className="text-muted-foreground">
+                        This project was manually flagged. You can click Re-evaluate to run AI evaluation again if
+                        access is restored.
+                      </p>
+                    </div>
+                  ) : selectedProject.evaluation ? (
                     <div className="space-y-4 text-sm rounded-lg bg-primary/5 border border-primary/20 p-4">
                       <div>
                         <span className="font-medium text-muted-foreground block mb-1">Score</span>

@@ -89,6 +89,8 @@ export interface EvaluatedProject extends HackathonProject {
   evaluation?: EvaluationResult;
   status: "pending" | "processing" | "processed" | "error";
   error?: string;
+  /** When true: manually flagged as cannot evaluate (e.g. no Drive access) */
+  cannotEvaluate?: boolean;
 }
 
 // Required CSV headers (Score and Reason is optional)

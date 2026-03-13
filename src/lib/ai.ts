@@ -153,7 +153,16 @@ function getApiErrorMessage(err: unknown): string {
   return msg || "An unexpected error occurred.";
 }
 
-async function evaluateWithGemini(apiKey: string, prompt: string): Promise<string> {
+export interface AIUsage {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+async function evaluateWithGemini(
+  apiKey: string,
+  prompt: string
+): Promise<{ text: string; usage?: AIUsage }> {
   try {
     const genAI = new GoogleGenerativeAI(apiKey.trim());
     const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
@@ -162,13 +171,26 @@ async function evaluateWithGemini(apiKey: string, prompt: string): Promise<strin
     if (!text) {
       throw new Error("No response received from API");
     }
-    return text;
+    const usage = result.response.usageMetadata;
+    return {
+      text,
+      usage: usage
+        ? {
+            promptTokens: usage.promptTokenCount ?? 0,
+            completionTokens: usage.candidatesTokenCount ?? 0,
+            totalTokens: usage.totalTokenCount ?? 0,
+          }
+        : undefined,
+    };
   } catch (err) {
     throw new Error(getApiErrorMessage(err));
   }
 }
 
-async function evaluateWithOpenAI(apiKey: string, prompt: string): Promise<string> {
+async function evaluateWithOpenAI(
+  apiKey: string,
+  prompt: string
+): Promise<{ text: string; usage?: AIUsage }> {
   try {
     const client = new OpenAI({ apiKey: apiKey.trim() });
     const completion = await client.chat.completions.create({
@@ -179,10 +201,25 @@ async function evaluateWithOpenAI(apiKey: string, prompt: string): Promise<strin
     if (!text) {
       throw new Error("No response received from API");
     }
-    return text;
+    const usage = completion.usage;
+    return {
+      text,
+      usage: usage
+        ? {
+            promptTokens: usage.prompt_tokens ?? 0,
+            completionTokens: usage.completion_tokens ?? 0,
+            totalTokens: usage.total_tokens ?? 0,
+          }
+        : undefined,
+    };
   } catch (err) {
     throw new Error(getApiErrorMessage(err));
   }
+}
+
+export interface EvaluateProjectResult {
+  result: EvaluationResult;
+  usage?: AIUsage;
 }
 
 export async function evaluateProject(
@@ -191,7 +228,7 @@ export async function evaluateProject(
   criteria?: JudgingCriterion[],
   provider: AIProvider = "gemini",
   driveResult?: DriveFetchResult | null
-): Promise<EvaluationResult> {
+): Promise<EvaluateProjectResult> {
   if (!apiKey?.trim()) {
     throw new Error("API key is required");
   }
@@ -199,10 +236,10 @@ export async function evaluateProject(
   const judgingCriteria = criteria && criteria.length > 0 ? criteria : [...DEFAULT_CRITERIA];
   const prompt = buildPrompt(project, judgingCriteria, driveResult);
 
-  const text =
+  const { text, usage } =
     provider === "openai"
       ? await evaluateWithOpenAI(apiKey, prompt)
       : await evaluateWithGemini(apiKey, prompt);
 
-  return parseJsonResponse(text);
+  return { result: parseJsonResponse(text), usage };
 }

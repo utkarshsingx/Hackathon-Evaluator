@@ -46,14 +46,19 @@ export async function POST(request: NextRequest) {
       ? await fetchDriveContent(driveLink, driveApiKey)
       : null;
 
-    const result = await evaluateProject(
+    const { result, usage } = await evaluateProject(
       apiKey,
       project,
       criteria,
       prov,
       driveResult
     );
-    return NextResponse.json(result);
+    if (usage) {
+      console.log(
+        `[Hackathon Evaluator] ${project["Project Title"]}: prompt=${usage.promptTokens} completion=${usage.completionTokens} total=${usage.totalTokens}`
+      );
+    }
+    return NextResponse.json({ ...result, usage });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Evaluation failed";

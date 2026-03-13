@@ -1,4 +1,6 @@
 import Papa from "papaparse";
+import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
 import type { HackathonProject, EvaluatedProject } from "./types";
 import { REQUIRED_CSV_HEADERS } from "./types";
 
@@ -170,12 +172,17 @@ export function exportToCSV(projects: EvaluatedProject[]): string {
       row[col] = val != null ? String(val) : "";
     }
 
-    // Appended evaluation fields
-    if (p.evaluation) {
+    // Appended evaluation fields (use newlines for line wrap in Excel)
+    if (p.cannotEvaluate) {
+      row["Marks"] = "Cannot be evaluated";
+      row["Reason"] = "Cannot be evaluated as there was no access to Drive.";
+      row["Pros"] = "";
+      row["Cons"] = "";
+    } else if (p.evaluation) {
       row["Marks"] = p.evaluation.score;
       row["Reason"] = p.evaluation.reason_why;
-      row["Pros"] = Array.isArray(p.evaluation.pros) ? p.evaluation.pros.join("; ") : "";
-      row["Cons"] = Array.isArray(p.evaluation.cons) ? p.evaluation.cons.join("; ") : "";
+      row["Pros"] = Array.isArray(p.evaluation.pros) ? p.evaluation.pros.join("\n") : "";
+      row["Cons"] = Array.isArray(p.evaluation.cons) ? p.evaluation.cons.join("\n") : "";
     } else {
       row["Marks"] = "";
       row["Reason"] = "";
@@ -197,4 +204,164 @@ export function downloadCSV(csv: string, filename = "hackathon-evaluations.csv")
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function getExportRows(projects: EvaluatedProject[]): Record<string, string | number>[] {
+  const rows = projects.map((p) => {
+    const row: Record<string, string | number> = {};
+    for (const col of ORIGINAL_CSV_COLUMNS) {
+      const val = col in p ? (p as unknown as Record<string, unknown>)[col] : undefined;
+      row[col] = val != null ? String(val) : "";
+    }
+    if (p.cannotEvaluate) {
+      row["Marks"] = "Cannot be evaluated";
+      row["Reason"] = "Cannot be evaluated as there was no access to Drive.";
+      row["Pros"] = "";
+      row["Cons"] = "";
+    } else if (p.evaluation) {
+      row["Marks"] = p.evaluation.score;
+      row["Reason"] = p.evaluation.reason_why;
+      row["Pros"] = Array.isArray(p.evaluation.pros) ? p.evaluation.pros.join("\n") : "";
+      row["Cons"] = Array.isArray(p.evaluation.cons) ? p.evaluation.cons.join("\n") : "";
+    } else {
+      row["Marks"] = "";
+      row["Reason"] = "";
+      row["Pros"] = "";
+      row["Cons"] = "";
+    }
+    return row;
+  });
+  return rows;
+}
+
+export function downloadExcel(projects: EvaluatedProject[], filename = "hackathon-evaluations.xlsx") {
+  const rows = getExportRows(projects);
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const colWidths = Object.keys(rows[0] || {}).map(() => ({ wch: 20 }));
+  ws["!cols"] = colWidths;
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Evaluations");
+  XLSX.writeFile(wb, filename);
+}
+
+const PDF_HEADER_FONT = 8;
+const PDF_BODY_FONT = 7;
+
+/** Sanitize text for jsPDF: replace emoji and unsupported Unicode to avoid gibberish (jsPDF Helvetica has no emoji support) */
+function sanitizeForPdf(text: string): string {
+  let s = String(text ?? "").trim();
+  try {
+    s = s.replace(/\p{Emoji_Presentation}/gu, " ");
+    s = s.replace(/\p{Emoji}\uFE0F?/gu, " ");
+    s = s.replace(/\p{Extended_Pictographic}/gu, " ");
+  } catch {
+    s = s.replace(/[\uD83C-\uDBFF\uDC00-\uDFFF]+/g, " ");
+  }
+  s = s.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]?/g, "");
+  s = s.replace(/[\u200B-\u200D\uFEFF]/g, "");
+  s = s.replace(/  +/g, " ").trim();
+  return s;
+}
+const PDF_PAGE_W = 297;
+const PDF_PAGE_H = 210;
+const PDF_MARGIN = 6;
+const PDF_LINE_HEIGHT = 3.6;
+const PDF_CELL_PADDING = 2.5;
+const PDF_MAX_LINES_PER_CELL = 12;
+
+export function downloadPDF(projects: EvaluatedProject[], filename = "hackathon-evaluations.pdf") {
+  const rows = getExportRows(projects);
+  if (rows.length === 0) return;
+
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  doc.setLineHeightFactor(1.25);
+  const headers = Object.keys(rows[0]);
+  const colCount = headers.length;
+  const colW = (PDF_PAGE_W - PDF_MARGIN * 2) / colCount;
+
+  let y = PDF_MARGIN;
+
+  const addHeader = () => {
+    const headerLines = headers.map((h) =>
+      doc.splitTextToSize(sanitizeForPdf(String(h || "")), colW - PDF_CELL_PADDING * 2)
+    );
+    const headerH =
+      Math.max(...headerLines.map((l) => l.length), 1) * PDF_LINE_HEIGHT + PDF_CELL_PADDING * 2;
+
+    headers.forEach((h, i) => {
+      const x = PDF_MARGIN + i * colW;
+      doc.setFillColor(55, 65, 81);
+      doc.rect(x, y, colW, headerH, "F");
+      doc.setDrawColor(75, 85, 99);
+      doc.setLineWidth(0.2);
+      doc.rect(x, y, colW, headerH, "S");
+    });
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(PDF_HEADER_FONT);
+    doc.setTextColor(255, 255, 255);
+    headers.forEach((h, i) => {
+      const x = PDF_MARGIN + i * colW + PDF_CELL_PADDING;
+      const lines = headerLines[i].slice(0, PDF_MAX_LINES_PER_CELL);
+      doc.text(lines, x, y + PDF_CELL_PADDING + PDF_LINE_HEIGHT);
+    });
+    doc.setTextColor(0, 0, 0);
+    doc.setLineWidth(0.1);
+    y += headerH;
+  };
+
+  const addRow = (r: Record<string, string | number>, rowIndex: number) => {
+    const cellLines = headers.map((h) => {
+      const text = sanitizeForPdf(String(r[h] ?? ""));
+      return doc.splitTextToSize(text, colW - PDF_CELL_PADDING * 2);
+    });
+    const rowH =
+      Math.max(
+        ...cellLines.map((l) => l.slice(0, PDF_MAX_LINES_PER_CELL).length),
+        1
+      ) *
+        PDF_LINE_HEIGHT +
+      PDF_CELL_PADDING * 2;
+
+    const isAltRow = rowIndex % 2 === 1;
+    if (isAltRow) {
+      headers.forEach((_, i) => {
+        const x = PDF_MARGIN + i * colW;
+        doc.setFillColor(249, 250, 251);
+        doc.rect(x, y, colW, rowH, "F");
+      });
+    }
+    headers.forEach((_, i) => {
+      const x = PDF_MARGIN + i * colW;
+      doc.setDrawColor(209, 213, 219);
+      doc.setLineWidth(0.15);
+      doc.rect(x, y, colW, rowH, "S");
+    });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(PDF_BODY_FONT);
+    doc.setTextColor(31, 41, 55);
+    headers.forEach((h, i) => {
+      const x = PDF_MARGIN + i * colW + PDF_CELL_PADDING;
+      const lines = cellLines[i].slice(0, PDF_MAX_LINES_PER_CELL);
+      doc.text(lines, x, y + PDF_CELL_PADDING + PDF_LINE_HEIGHT);
+    });
+    doc.setTextColor(0, 0, 0);
+    doc.setLineWidth(0.1);
+    y += rowH;
+  };
+
+  const checkPageBreak = () => {
+    if (y > PDF_PAGE_H - PDF_MARGIN - 20) {
+      doc.addPage("a4", "landscape");
+      y = PDF_MARGIN;
+      addHeader();
+    }
+  };
+
+  addHeader();
+  for (let i = 0; i < rows.length; i++) {
+    checkPageBreak();
+    addRow(rows[i], i);
+  }
+
+  doc.save(filename);
 }
