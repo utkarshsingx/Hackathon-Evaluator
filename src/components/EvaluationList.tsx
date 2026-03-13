@@ -64,26 +64,29 @@ export function EvaluationList({
             No evaluations yet. Upload a CSV to create one.
           </p>
         ) : (
-          <ul className="space-y-1 max-h-48 sm:max-h-56 overflow-y-auto -mx-1 px-1">
-            {evaluations.map((e) => (
+          <ul className="space-y-1.5 max-h-56 sm:max-h-64 overflow-y-auto overflow-x-hidden -mx-1 px-1 overscroll-contain">
+            {evaluations.map((e, idx) => (
               <li key={e.id}>
                 <button
                   type="button"
                   onClick={() => onSelect(e.id)}
                   className={cn(
-                    "w-full text-left px-3 py-3 sm:py-2 rounded-lg transition-colors flex items-start gap-2 min-h-[44px] sm:min-h-0",
+                    "w-full text-left px-3 py-3 sm:py-2.5 rounded-lg transition-colors flex items-start gap-2.5 min-h-[44px] sm:min-h-0 touch-manipulation",
                     activeId === e.id
                       ? "bg-primary/15 text-primary border border-primary/30"
                       : "hover:bg-muted/50 text-foreground"
                   )}
                 >
-                  <FileSpreadsheet className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span className="text-muted-foreground font-medium text-xs sm:text-sm w-5 sm:w-6 shrink-0 pt-0.5">
+                    {idx + 1}.
+                  </span>
+                  <FileSpreadsheet className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium text-sm truncate">{e.name}</p>
                     {e.user_email && (
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                        <User className="h-3 w-3" />
-                        {e.user_email}
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5 truncate">
+                        <User className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{e.user_email}</span>
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground mt-0.5">

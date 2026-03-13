@@ -27,6 +27,8 @@ import {
   Sparkles,
   ChevronUp,
   ChevronDown,
+  ChevronRight,
+  ArrowUpDown,
   Download,
   FileText,
 } from "lucide-react";
@@ -309,12 +311,109 @@ export default function SharePage() {
 
         <Card className="shadow-soft overflow-hidden">
           <CardContent className="p-0">
-            <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-              <table className="w-full min-w-[500px]">
+            {/* Mobile: sort filter */}
+            <div className="sm:hidden flex items-center gap-2 px-4 py-3 border-b border-border bg-muted/30">
+              <span className="text-sm font-medium text-muted-foreground shrink-0">Sort by</span>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 min-h-[44px] justify-between gap-2 font-normal"
+                  >
+                    <span className="truncate">
+                      {sortConfig?.key === "title" && (sortConfig.direction === "asc" ? "Title (A→Z)" : "Title (Z→A)")}
+                      {sortConfig?.key === "score" && (sortConfig.direction === "desc" ? "Score (high first)" : "Score (low first)")}
+                      {sortConfig?.key === "rank" && (sortConfig.direction === "asc" ? "Rank (1st first)" : "Rank (last first)")}
+                      {sortConfig?.key === "status" && (sortConfig.direction === "asc" ? "Status (A→Z)" : "Status (Z→A)")}
+                      {!sortConfig && "Select..."}
+                    </span>
+                    <ArrowUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-[calc(100vw-3rem)] max-w-[280px]">
+                  <DropdownMenuItem onClick={() => setSortConfig({ key: "title", direction: "asc" })}>
+                    Title (A→Z)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortConfig({ key: "title", direction: "desc" })}>
+                    Title (Z→A)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortConfig({ key: "score", direction: "desc" })}>
+                    Score (high first)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortConfig({ key: "score", direction: "asc" })}>
+                    Score (low first)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortConfig({ key: "rank", direction: "asc" })}>
+                    Rank (1st first)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortConfig({ key: "rank", direction: "desc" })}>
+                    Rank (last first)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortConfig({ key: "status", direction: "asc" })}>
+                    Status (A→Z)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setSortConfig({ key: "status", direction: "desc" })}>
+                    Status (Z→A)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+            {/* Mobile: card list */}
+            <div className="sm:hidden divide-y divide-border">
+              {sortedProjects.map((project, idx) => (
+                <button
+                  type="button"
+                  key={project.id}
+                  onClick={() => setSelectedProject(project)}
+                  className={`w-full text-left px-4 py-3.5 active:bg-muted/50 transition-colors touch-manipulation min-h-[52px] flex items-center gap-3 ${
+                    idx % 2 === 1 ? "bg-muted/20" : ""
+                  }`}
+                >
+                  <span className="text-muted-foreground font-medium text-sm w-6 shrink-0">
+                    {idx + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-foreground truncate text-sm">
+                      {project["Project Title"] || "Untitled"}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">
+                      {project.Email || "—"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {project.driveNotAccessible && (
+                      <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-500 shrink-0" />
+                    )}
+                    {project.cannotEvaluate ? (
+                      <span className="text-amber-600 dark:text-amber-500 text-xs font-medium">
+                        N/A
+                      </span>
+                    ) : project.evaluation ? (
+                      getScoreBadge(project.evaluation.score)
+                    ) : (
+                      <span className="text-muted-foreground text-xs">—</span>
+                    )}
+                    {!project.cannotEvaluate && rankMap.has(project.id) && (
+                      <span className="text-muted-foreground font-medium text-xs">
+                        #{rankMap.get(project.id)}
+                      </span>
+                    )}
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                </button>
+              ))}
+            </div>
+            {/* Desktop: table */}
+            <div className="hidden sm:block overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+              <table className="w-full min-w-[500px] sm:min-w-[600px]">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
                     <th className="text-left p-2 sm:p-4 font-semibold text-foreground w-10 sm:w-14 shrink-0 text-xs sm:text-base">
                       S.No
+                    </th>
+                    <th className="text-left p-2 sm:p-4 font-semibold text-foreground text-xs sm:text-base min-w-[180px] sm:min-w-[240px]">
+                      Email
                     </th>
                     <th
                       className="text-left p-2 sm:p-4 font-semibold text-foreground cursor-pointer hover:bg-muted transition-colors select-none text-xs sm:text-base"
@@ -365,6 +464,9 @@ export default function SharePage() {
                     >
                       <td className="p-2 sm:p-4 text-muted-foreground font-medium w-10 sm:w-14 shrink-0 text-xs sm:text-base">
                         {idx + 1}
+                      </td>
+                      <td className="p-2 sm:p-4 text-xs sm:text-sm text-foreground break-all min-w-0 max-w-[200px] sm:max-w-[260px]">
+                        {project.Email || "—"}
                       </td>
                       <td className="p-2 sm:p-4 font-medium text-foreground break-words text-sm sm:text-base min-w-[120px]">
                         {project["Project Title"] || "Untitled"}
@@ -464,6 +566,10 @@ export default function SharePage() {
                     </h3>
                   </div>
                   <div className="space-y-4 text-sm rounded-lg bg-muted/50 p-4">
+                    <div className="md:hidden">
+                      <span className="font-medium text-muted-foreground block mb-1">Email</span>
+                      <p className="text-foreground break-all">{selectedProject.Email || "—"}</p>
+                    </div>
                     <div>
                       <span className="font-medium text-muted-foreground block mb-1">Problem</span>
                       <p className="text-foreground">{selectedProject["What real-world problem are you solving?"] || "—"}</p>
@@ -559,42 +665,88 @@ export default function SharePage() {
                       {criteria.length > 0 && selectedProject.evaluation.criteria_scores && (
                         <div>
                           <span className="font-medium text-muted-foreground block mb-2">Score breakdown</span>
-                          <div className="rounded-lg border border-border overflow-x-auto">
-                            <table className="w-full text-sm min-w-[200px]">
-                              <thead>
-                                <tr className="bg-muted/50 border-b border-border">
-                                  <th className="text-left p-2 sm:p-3 font-medium text-foreground">Criterion</th>
-                                  <th className="text-right p-2 sm:p-3 font-medium text-foreground w-20">Max</th>
-                                  <th className="text-right p-2 sm:p-3 font-medium text-foreground w-20">Given</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(() => {
-                                  const scores = selectedProject.evaluation.criteria_scores ?? [];
-                                  const scoresByName = new Map(scores.map((s) => [s.name, s]));
-                                  return criteria.map((c) => {
-                                    const s = scoresByName.get(c.name);
-                                    return s
-                                      ? { name: c.name, max: c.points, given: s.given }
-                                      : { name: c.name, max: c.points, given: null as number | null };
-                                  });
-                                })().map((row, i) => (
-                                  <tr key={i} className="border-b border-border last:border-0">
-                                    <td className="p-2 sm:p-3 text-foreground break-words">{row.name}</td>
-                                    <td className="p-2 sm:p-3 text-right text-muted-foreground">{row.max}</td>
-                                    <td className="p-2 sm:p-3 text-right font-medium text-foreground">
-                                      {typeof row.given === "number" ? row.given : "—"}
-                                    </td>
-                                  </tr>
-                                ))}
-                                <tr className="bg-muted/30 font-semibold">
-                                  <td className="p-2 sm:p-3 text-foreground">Total</td>
-                                  <td className="p-2 sm:p-3 text-right text-muted-foreground">{maxScore}</td>
-                                  <td className="p-2 sm:p-3 text-right text-foreground">{selectedProject.evaluation.score}</td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
+                          {(() => {
+                            const scores = selectedProject.evaluation.criteria_scores ?? [];
+                            const scoresByName = new Map(scores.map((s) => [s.name, s]));
+                            const rows = criteria.map((c) => {
+                              const s = scoresByName.get(c.name);
+                              return s
+                                ? { name: c.name, max: c.points, given: s.given }
+                                : { name: c.name, max: c.points, given: null as number | null };
+                            });
+                            return (
+                              <>
+                                {/* Mobile: card list */}
+                                <div className="md:hidden space-y-2">
+                                  {rows.map((row, i) => {
+                                    const given = typeof row.given === "number" ? row.given : null;
+                                    const pct = row.max > 0 && given !== null ? (given / row.max) * 100 : 0;
+                                    const badgeColor = pct >= 80 ? "bg-chart-2/25 text-chart-2" : pct >= 60 ? "bg-chart-3/25 text-chart-3" : "bg-chart-5/25 text-chart-5";
+                                    const barColor = pct >= 80 ? "bg-chart-2/40" : pct >= 60 ? "bg-chart-3/40" : "bg-chart-5/40";
+                                    return (
+                                      <div
+                                        key={i}
+                                        className="rounded-lg border border-border bg-muted/30 p-3 min-h-[44px] flex flex-col gap-2"
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <p className="text-sm font-medium text-foreground break-words flex-1 min-w-0">
+                                            {row.name}
+                                          </p>
+                                          {given !== null ? (
+                                            <span className={`inline-flex items-center justify-center min-w-[2.5rem] px-2 py-0.5 rounded-md text-sm font-bold shrink-0 tabular-nums ${badgeColor}`}>
+                                              {given}/{row.max}
+                                            </span>
+                                          ) : (
+                                            <span className="text-muted-foreground text-sm">—</span>
+                                          )}
+                                        </div>
+                                        {given !== null && (
+                                          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                                            <div
+                                              className={`h-full rounded-full transition-all ${barColor}`}
+                                              style={{ width: `${Math.min(100, pct)}%` }}
+                                            />
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                  <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-center justify-between font-semibold">
+                                    <span className="text-foreground">Total</span>
+                                    {getScoreBadge(selectedProject.evaluation.score)}
+                                  </div>
+                                </div>
+                                {/* Desktop: table */}
+                                <div className="hidden md:block rounded-lg border border-border overflow-x-auto">
+                                  <table className="w-full text-sm min-w-[200px]">
+                                    <thead>
+                                      <tr className="bg-muted/50 border-b border-border">
+                                        <th className="text-left p-2 sm:p-3 font-medium text-foreground">Criterion</th>
+                                        <th className="text-right p-2 sm:p-3 font-medium text-foreground w-20">Max</th>
+                                        <th className="text-right p-2 sm:p-3 font-medium text-foreground w-20">Given</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map((row, i) => (
+                                        <tr key={i} className="border-b border-border last:border-0">
+                                          <td className="p-2 sm:p-3 text-foreground break-words">{row.name}</td>
+                                          <td className="p-2 sm:p-3 text-right text-muted-foreground">{row.max}</td>
+                                          <td className="p-2 sm:p-3 text-right font-medium text-foreground">
+                                            {typeof row.given === "number" ? row.given : "—"}
+                                          </td>
+                                        </tr>
+                                      ))}
+                                      <tr className="bg-muted/30 font-semibold">
+                                        <td className="p-2 sm:p-3 text-foreground">Total</td>
+                                        <td className="p-2 sm:p-3 text-right text-muted-foreground">{maxScore}</td>
+                                        <td className="p-2 sm:p-3 text-right text-foreground">{selectedProject.evaluation.score}</td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
                       )}
                     </div>
