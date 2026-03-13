@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClientFromRequest } from "@/lib/supabase/server";
 import { nanoid } from "nanoid";
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const supabase = await createClient();
+    const supabase = createClientFromRequest(request);
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -19,6 +19,7 @@ export async function POST(
 
     const slug = nanoid(12);
 
+    // RLS ensures only owner can update; no need to filter by user_id
     const { data, error } = await supabase
       .from("evaluations")
       .update({
@@ -26,14 +27,20 @@ export async function POST(
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
-      .eq("user_id", user.id)
       .select("share_slug")
-      .single();
+      .maybeSingle();
 
-    if (error || !data) {
+    if (error) {
       return NextResponse.json(
-        { error: error?.message ?? "Not found" },
-        { status: error ? 500 : 404 }
+        { error: error.message },
+        { status: 500 }
+      );
+    }
+
+    if (!data) {
+      return NextResponse.json(
+        { error: "Evaluation not found or you don't have permission to share it" },
+        { status: 404 }
       );
     }
 

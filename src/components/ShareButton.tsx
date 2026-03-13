@@ -23,6 +23,7 @@ export function ShareButton({
     try {
       const res = await fetch(`/api/evaluations/${evaluationId}/share`, {
         method: "POST",
+        credentials: "include",
       });
       const data = await res.json();
 
