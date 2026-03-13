@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import {
   Settings,
   Upload,
@@ -18,6 +18,8 @@ import {
   BarChart3,
   Plus,
   Trash2,
+  Pause,
+  RotateCcw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,13 +32,12 @@ import {
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
-import { evaluateProject, type AIProvider } from "@/lib/ai";
+import type { AIProvider } from "@/lib/ai";
 import { parseCSV, exportToCSV, downloadCSV, CSVValidationError } from "@/lib/csv";
 import type { EvaluatedProject, HackathonProject, JudgingCriterion } from "@/lib/types";
 import { DEFAULT_CRITERIA } from "@/lib/types";
 import ShinyText from "@/components/ShinyText";
 
-const API_KEY_STORAGE = "hackathon-api-key";
 const API_PROVIDER_STORAGE = "hackathon-api-provider";
 const CRITERIA_STORAGE = "hackathon-judging-criteria";
 const PROJECTS_STORAGE = "hackathon-projects";
@@ -44,7 +45,6 @@ const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 2000;
 
 export function Dashboard() {
-  const [apiKey, setApiKey] = useState("");
   const [apiProvider, setApiProvider] = useState<AIProvider>("gemini");
   const [showSettings, setShowSettings] = useState(false);
   const [projects, setProjects] = useState<EvaluatedProject[]>([]);
@@ -62,20 +62,11 @@ export function Dashboard() {
     validation: import("@/lib/csv").CSVValidationResult;
   } | null>(null);
   const [criteria, setCriteria] = useState<JudgingCriterion[]>(DEFAULT_CRITERIA);
+  const pauseRequestedRef = useRef(false);
   const { toast } = useToast();
 
-  // Load API key, criteria, and projects from localStorage on mount
+  // Load criteria and projects from localStorage on mount
   useEffect(() => {
-    let stored = localStorage.getItem(API_KEY_STORAGE);
-    if (!stored) {
-      const legacy = localStorage.getItem("gemini-api-key");
-      if (legacy) {
-        localStorage.setItem(API_KEY_STORAGE, legacy);
-        localStorage.removeItem("gemini-api-key");
-        stored = legacy;
-      }
-    }
-    if (stored) setApiKey(stored);
     const storedProvider = localStorage.getItem(API_PROVIDER_STORAGE);
     if (storedProvider === "openai" || storedProvider === "gemini") setApiProvider(storedProvider);
     const storedCriteria = localStorage.getItem(CRITERIA_STORAGE);
@@ -106,26 +97,6 @@ export function Dashboard() {
       localStorage.removeItem(PROJECTS_STORAGE);
     }
   }, [projects]);
-
-  const saveApiKey = useCallback(() => {
-    const key = apiKey.trim();
-    if (key) {
-      localStorage.setItem(API_KEY_STORAGE, key);
-      localStorage.setItem(API_PROVIDER_STORAGE, apiProvider);
-      toast({
-        title: "API Key saved",
-        description: `Using ${apiProvider === "openai" ? "OpenAI" : "Gemini"}. Key stored securely.`,
-        variant: "success",
-      });
-      setShowSettings(false);
-    } else {
-      toast({
-        title: "Invalid key",
-        description: "Please enter a valid API key.",
-        variant: "destructive",
-      });
-    }
-  }, [apiKey, apiProvider, toast]);
 
   const handleFileUpload = useCallback(
     async (file: File) => {
@@ -198,19 +169,8 @@ export function Dashboard() {
   );
 
   const processAll = useCallback(async () => {
-    const storedKey = localStorage.getItem(API_KEY_STORAGE);
-    if (!storedKey?.trim()) {
-      toast({
-        title: "API key required",
-        description: "Please add your API key in Settings first.",
-        variant: "destructive",
-      });
-      setShowSettings(true);
-      return;
-    }
-
-    const pending = projects.filter((p) => p.status === "pending");
-    if (pending.length === 0) {
+    const toProcess = projects.filter((p) => p.status === "pending" || p.status === "error");
+    if (toProcess.length === 0) {
       toast({
         title: "Nothing to process",
         description: "All projects have already been evaluated.",
@@ -220,11 +180,17 @@ export function Dashboard() {
     }
 
     setIsProcessing(true);
+    pauseRequestedRef.current = false;
 
-    for (let i = 0; i < pending.length; i += BATCH_SIZE) {
-      const batch = pending.slice(i, i + BATCH_SIZE);
+    for (let i = 0; i < toProcess.length; i += BATCH_SIZE) {
+      if (pauseRequestedRef.current) {
+        toast({ title: "Paused", description: "Evaluation paused. Click Process All to resume.", variant: "default" });
+        break;
+      }
+      const batch = toProcess.slice(i, i + BATCH_SIZE);
 
       for (const project of batch) {
+        if (pauseRequestedRef.current) break;
         setProjects((prev) =>
           prev.map((p) =>
             p.id === project.id ? { ...p, status: "processing" as const } : p
@@ -244,7 +210,21 @@ export function Dashboard() {
               })()
             : [...DEFAULT_CRITERIA];
           const storedProvider = (localStorage.getItem(API_PROVIDER_STORAGE) || "gemini") as AIProvider;
-          const result = await evaluateProject(storedKey, project, judgingCriteria, storedProvider);
+
+          const res = await fetch("/api/evaluate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              project,
+              provider: storedProvider,
+              criteria: judgingCriteria,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.error || "Evaluation failed");
+          }
+          const result = data;
           setProjects((prev) =>
             prev.map((p) =>
               p.id === project.id
@@ -286,18 +266,90 @@ export function Dashboard() {
         await new Promise((r) => setTimeout(r, 500));
       }
 
-      if (i + BATCH_SIZE < pending.length) {
+      if (pauseRequestedRef.current) break;
+      if (i + BATCH_SIZE < toProcess.length) {
         await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
       }
     }
 
     setIsProcessing(false);
-    toast({
-      title: "Processing complete",
-      description: "All projects have been evaluated.",
-      variant: "success",
-    });
+    if (!pauseRequestedRef.current) {
+      toast({
+        title: "Processing complete",
+        description: "All projects have been evaluated.",
+        variant: "success",
+      });
+    }
   }, [projects, toast]);
+
+  const pauseEvaluation = useCallback(() => {
+    pauseRequestedRef.current = true;
+  }, []);
+
+  const evaluateSingleProject = useCallback(
+    async (project: EvaluatedProject) => {
+      const storedCriteria = localStorage.getItem(CRITERIA_STORAGE);
+      const judgingCriteria: JudgingCriterion[] = storedCriteria
+        ? (() => {
+            try {
+              const p = JSON.parse(storedCriteria) as JudgingCriterion[];
+              return Array.isArray(p) && p.length > 0 ? p : [...DEFAULT_CRITERIA];
+            } catch {
+              return [...DEFAULT_CRITERIA];
+            }
+          })()
+        : [...DEFAULT_CRITERIA];
+      const storedProvider = (localStorage.getItem(API_PROVIDER_STORAGE) || "gemini") as AIProvider;
+
+      setProjects((prev) =>
+        prev.map((p) => (p.id === project.id ? { ...p, status: "processing" as const } : p))
+      );
+
+      try {
+        const res = await fetch("/api/evaluate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project, provider: storedProvider, criteria: judgingCriteria }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Evaluation failed");
+
+        setProjects((prev) =>
+          prev.map((p) =>
+            p.id === project.id
+              ? { ...p, evaluation: data, status: "processed" as const, error: undefined }
+              : p
+          )
+        );
+        setSelectedProject((prev) =>
+          prev?.id === project.id ? { ...prev, evaluation: data, status: "processed" as const, error: undefined } : prev
+        );
+        toast({
+          title: "Re-evaluated",
+          description: `${project["Project Title"]} — Score: ${data.score}/${judgingCriteria.reduce((s, c) => s + c.points, 0)}`,
+          variant: "success",
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        setProjects((prev) =>
+          prev.map((p) => (p.id === project.id ? { ...p, status: "error" as const, error: msg } : p))
+        );
+        setSelectedProject((prev) =>
+          prev?.id === project.id ? { ...prev, status: "error" as const, error: msg } : prev
+        );
+        toast({ title: "Evaluation failed", description: msg, variant: "destructive" });
+      }
+    },
+    [toast]
+  );
+
+  const handleReEvaluate = useCallback(
+    (project: EvaluatedProject, e: React.MouseEvent) => {
+      e.stopPropagation();
+      evaluateSingleProject({ ...project, status: "pending", evaluation: undefined, error: undefined });
+    },
+    [evaluateSingleProject]
+  );
 
   const handleExport = useCallback(() => {
     if (projects.length === 0) {
@@ -429,6 +481,8 @@ export function Dashboard() {
 
   const processedCount = projects.filter((p) => p.status === "processed").length;
   const pendingCount = projects.filter((p) => p.status === "pending").length;
+  const errorCount = projects.filter((p) => p.status === "error").length;
+  const toProcessCount = pendingCount + errorCount;
 
   return (
     <div className="relative min-h-screen bg-background">
@@ -458,54 +512,35 @@ export function Dashboard() {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-8">
-              {/* API Key */}
-              <div className="space-y-4">
-                <h3 className="font-semibold text-sm text-foreground">API Key</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Choose your provider and enter the API key. Stored locally in your browser.
-                </p>
-                <div className="space-y-2">
-                  <Label>Provider</Label>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant={apiProvider === "gemini" ? "default" : "outline"}
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => setApiProvider("gemini")}
-                    >
-                      Google Gemini
-                    </Button>
-                    <Button
-                      type="button"
-                      variant={apiProvider === "openai" ? "default" : "outline"}
-                      size="sm"
-                      className="flex-1"
-                      onClick={() => setApiProvider("openai")}
-                    >
-                      OpenAI
-                    </Button>
-                  </div>
+              {/* AI Provider Toggle */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-sm text-foreground">Evaluate with</h3>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant={apiProvider === "gemini" ? "default" : "outline"}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setApiProvider("gemini");
+                      localStorage.setItem(API_PROVIDER_STORAGE, "gemini");
+                    }}
+                  >
+                    Gemini
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={apiProvider === "openai" ? "default" : "outline"}
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setApiProvider("openai");
+                      localStorage.setItem(API_PROVIDER_STORAGE, "openai");
+                    }}
+                  >
+                    OpenAI
+                  </Button>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="api-key">
-                    API Key
-                    {apiProvider === "gemini" && " (Google AI Studio)"}
-                    {apiProvider === "openai" && " (platform.openai.com)"}
-                  </Label>
-                  <Input
-                    id="api-key"
-                    type="password"
-                    placeholder={apiProvider === "gemini" ? "Gemini API key" : "sk-..."}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && saveApiKey()}
-                    className="h-11"
-                  />
-                </div>
-                <Button onClick={saveApiKey} className="w-full h-11">
-                  Save API Key
-                </Button>
               </div>
 
               {/* Judging Criteria */}
@@ -776,8 +811,10 @@ export function Dashboard() {
                     <Clock className="h-4 w-4 sm:h-5 sm:w-5" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xl sm:text-2xl font-bold text-foreground truncate">{pendingCount}</p>
-                    <p className="text-xs text-muted-foreground">Pending</p>
+                    <p className="text-xl sm:text-2xl font-bold text-foreground truncate">{toProcessCount}</p>
+                    <p className="text-xs text-muted-foreground">
+                      To Process{errorCount > 0 ? ` (${pendingCount} pending, ${errorCount} retry)` : ""}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -809,7 +846,7 @@ export function Dashboard() {
               <div className="flex gap-2 w-full sm:w-auto">
                 <Button
                   onClick={processAll}
-                  disabled={isProcessing}
+                  disabled={isProcessing || toProcessCount === 0}
                   className="gap-1.5 sm:gap-2 flex-1 sm:flex-initial h-10 sm:h-11 px-4 sm:px-6 text-sm bg-primary hover:bg-primary/90"
                 >
                   {isProcessing ? (
@@ -819,6 +856,16 @@ export function Dashboard() {
                   )}
                   Process All
                 </Button>
+                {isProcessing && (
+                  <Button
+                    variant="outline"
+                    onClick={pauseEvaluation}
+                    className="gap-1.5 sm:gap-2 h-10 sm:h-11 px-4 sm:px-6 text-sm border-destructive/50 text-destructive hover:bg-destructive/10"
+                  >
+                    <Pause className="h-4 w-4" />
+                    Pause
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   onClick={handleExport}
@@ -909,7 +956,24 @@ export function Dashboard() {
                             )}
                           </td>
                           <td className="p-2 sm:p-4">
-                            {getStatusBadge(project.status)}
+                            <div className="flex items-center gap-2">
+                              {getStatusBadge(project.status)}
+                              {(project.evaluation || project.status === "error") && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 shrink-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleReEvaluate(project, e);
+                                  }}
+                                  disabled={isProcessing}
+                                  title="Re-evaluate"
+                                >
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -970,11 +1034,25 @@ export function Dashboard() {
                     getScoreBadge(selectedProject.evaluation.score)
                   )}
                 </DialogTitle>
-                <p className="text-sm text-muted-foreground">
-                  {selectedProject.evaluation
-                    ? "Original submission vs AI critique"
-                    : "View submission details"}
-                </p>
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedProject.evaluation
+                      ? "Original submission vs AI critique"
+                      : "View submission details"}
+                  </p>
+                  {(selectedProject.evaluation || selectedProject.status === "error") && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 shrink-0"
+                      onClick={(e) => handleReEvaluate(selectedProject, e)}
+                      disabled={isProcessing}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Re-evaluate
+                    </Button>
+                  )}
+                </div>
               </DialogHeader>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mt-4 sm:mt-6">
                 <div className="space-y-4">
